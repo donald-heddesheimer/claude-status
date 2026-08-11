@@ -17,6 +17,7 @@ final class PetController: NSObject {
     private let view: PetView
     private let stats = StatsPanel()
     private var statsTimer: Timer?
+    private var statsSize: NSSize = .zero
 
     init(store: SessionStore) {
         self.store = store
@@ -86,33 +87,54 @@ final class PetController: NSObject {
         view.mood = store.mood
         view.remoteBadge = store.remoteBadge
         view.caption = store.caption
-        if stats.isVisible { layoutStats() }
+        if stats.isVisible { refreshStats() }
     }
 
     // MARK: - Hover panel
 
     private func showStats() {
-        layoutStats()
-        stats.orderFrontRegardless()
+        refreshStats()
+        // refreshStats only moves the panel when the content size changed, so
+        // place it unconditionally here — the pet may have moved (menu, reset,
+        // display change) while the panel was hidden.
+        positionStats(statsSize)
+
+        // Attaching the panel as a child window hands the follow to the window
+        // server, which moves it in lockstep with the pet. Repositioning it
+        // ourselves from didMove can only ever trail the drag by a frame, which
+        // is exactly what a fast flick exposes.
+        if stats.parent == nil {
+            panel.addChildWindow(stats, ordered: .above)
+        }
 
         // The ages tick while you hover, so redraw on a slow timer rather than
         // freezing whatever the numbers happened to be on entry.
         statsTimer?.invalidate()
         statsTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            self?.layoutStats()
+            self?.refreshStats()
         }
     }
 
     private func hideStats() {
         statsTimer?.invalidate()
         statsTimer = nil
+        if stats.parent != nil { panel.removeChildWindow(stats) }
         stats.orderOut(nil)
     }
 
-    /// Sizes the panel to its content and parks it beside the pet, flipping to
-    /// whichever side has room — the pet lives in a corner by default.
-    private func layoutStats() {
+    /// Re-measures the content, and only moves the panel if that changed its
+    /// size. Measuring every string is the expensive half of this and has no
+    /// business running while you drag.
+    private func refreshStats() {
         let size = stats.update(with: store.stats)
+        guard size != statsSize else { return }
+        statsSize = size
+        positionStats(size)
+    }
+
+    /// Parks the panel beside the pet, flipping to whichever side has room —
+    /// the pet lives in a screen corner by default.
+    private func positionStats(_ size: NSSize) {
         let pet = panel.frame
         let screen = (panel.screen ?? NSScreen.main)?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
@@ -157,8 +179,10 @@ final class PetController: NSObject {
 
     @objc private func windowMoved() {
         UserDefaults.standard.set(NSStringFromPoint(panel.frame.origin), forKey: Self.originKey)
-        // Dragging the pet never fires mouseExited, so the panel has to follow.
-        if stats.isVisible { layoutStats() }
+        // The child window already followed. The only thing that can go stale
+        // is which side of the pet it belongs on, once a drag reaches a screen
+        // edge — and that check costs nothing, since it re-measures nothing.
+        if stats.isVisible { positionStats(statsSize) }
     }
 
     // MARK: - Menu
