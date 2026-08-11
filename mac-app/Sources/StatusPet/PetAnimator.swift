@@ -111,10 +111,10 @@ final class PetAnimator {
     /// up and down and one that has weight.
     private func busyPose() -> PetPose {
         var pose = PetPose()
-        let hop = abs(sin(now * 5.0))
-        pose.offset.height = hop * 5
-        pose.squash = 1.06 - hop * 0.10
-        pose.legs = sin(now * 10.0) > 0 ? .stepping : .planted
+        let hop = abs(sin(now * 4.2))
+        pose.offset.height = hop * 2.6
+        pose.squash = 1.03 - hop * 0.05
+        pose.legs = sin(now * 8.4) > 0 ? .stepping : .planted
         return pose
     }
 
@@ -123,14 +123,14 @@ final class PetAnimator {
     /// foot tap fills the gap between hops so it never looks parked.
     private func waitingPose() -> PetPose {
         var pose = PetPose()
-        pose.offset.width = sin(now * 22) * 1.5
+        pose.offset.width = sin(now * 22) * 1.3
 
-        let beat = fmod(now, 1.6)
+        let beat = fmod(now, 1.9)
         if beat < 0.36 {
             let k = CGFloat(beat / 0.36)
             let lift = abs(sin(k * .pi * 2))
-            pose.offset.height = lift * 4
-            pose.squash = 1 + (0.5 - lift) * 0.12
+            pose.offset.height = lift * 2.2
+            pose.squash = 1 + (0.5 - lift) * 0.06
         } else {
             pose.legs = fmod(beat, 0.9) < 0.18 ? .tapping : .planted
         }
@@ -151,8 +151,8 @@ final class PetAnimator {
 
         let k = age / duration
         let spring = exp(-5.5 * k) * sin(k * .pi * 3)
-        pose.squash *= 1 + CGFloat(spring) * 0.20
-        pose.offset.height += CGFloat(spring) * 3.5
+        pose.squash *= 1 + CGFloat(spring) * 0.09
+        pose.offset.height += CGFloat(spring) * 1.8
     }
 
     private func applyBlink(to pose: inout PetPose) {
