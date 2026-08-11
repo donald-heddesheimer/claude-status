@@ -4,9 +4,9 @@ A floating desktop pet for macOS that reacts to Claude Code — including
 sessions running on a **remote host over SSH**.
 
 It shuffles its feet while Claude works, jitters with a pulsing ring when Claude
-is blocked waiting on you, and shuts its eyes when nothing is running. Sessions
-on a remote machine carry a badge with that host's initial, so you can tell at a
-glance which box wants your attention.
+is blocked waiting on you, and shuts its eyes when nothing is running. A thought
+bubble names the tool in flight. Sessions on a remote machine carry a badge with
+that host's initial, so you can tell at a glance which box wants your attention.
 
 Click it to bring Claude to the front.
 
@@ -151,13 +151,16 @@ per-session setup.
 
 ## States
 
-| Hook event | Pet |
-|---|---|
-| `UserPromptSubmit` | bobs, legs shuffling — thinking |
-| `PreToolUse` / `PostToolUse` | bobs, legs shuffling — running a tool |
-| `Notification` | jitters with a pulsing ring — **blocked on you** |
-| `Stop` | settles, eyes open — idle |
-| `SessionEnd` | forgets the session |
+| Hook event | Pet | Bubble |
+|---|---|---|
+| `UserPromptSubmit` | bobs, legs shuffling, eyes squint | `thinking` |
+| `PreToolUse` / `PostToolUse` | bobs, legs shuffling, eyes squint | the tool name |
+| `Notification` | jitters with a pulsing ring — **blocked on you** | `needs you` |
+| `Stop` | settles, eyes open — idle | — |
+| `SessionEnd` | forgets the session | — |
+
+The thought bubble reports the most recent tool in flight, so a glance tells you
+not just that Claude is busy but what it's busy doing. It stays quiet when idle.
 
 **Idle vs. nothing running.** *Idle* means a session is alive and reporting but
 not working — Claude finished its turn and is waiting for you to type. *Nothing

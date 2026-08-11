@@ -85,6 +85,25 @@ final class SessionStore {
         return remote.host.first.map { String($0).uppercased() }
     }
 
+    /// Short text for the thought bubble, or nil when the pet has nothing to
+    /// say. Kept to a couple of words — it's a glance, not a status report.
+    var caption: String? {
+        switch mood {
+        case .asleep, .idle:
+            return nil
+        case .waiting:
+            return "needs you"
+        case .busy:
+            let busyStates: Set<String> = ["thinking", "working", "running"]
+            let working = sessions.values
+                .filter { busyStates.contains($0.state) }
+                .sorted { $0.seen > $1.seen }
+
+            guard let latest = working.first else { return "thinking" }
+            return latest.tool.isEmpty ? "thinking" : latest.tool
+        }
+    }
+
     /// Human-readable lines for the right-click menu.
     var summaryLines: [String] {
         if sessions.isEmpty { return ["No active sessions"] }

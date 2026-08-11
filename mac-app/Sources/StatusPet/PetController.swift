@@ -4,8 +4,9 @@ import AppKit
 /// where you dragged it.
 final class PetController: NSObject {
     private static let originKey = "com.claudestatus.petOrigin"
-    // Sized so the attention pulse and thinking dots never clip at the edges.
-    private static let size = NSSize(width: 140, height: 160)
+    // Tall enough for the thought bubble above the pet, wide enough that the
+    // attention pulse never clips at the edges.
+    private static let size = NSSize(width: 170, height: 190)
 
     private let store: SessionStore
     private let panel: PetPanel
@@ -75,6 +76,7 @@ final class PetController: NSObject {
     private func refresh() {
         view.mood = store.mood
         view.remoteBadge = store.remoteBadge
+        view.caption = store.caption
     }
 
     // MARK: - Position

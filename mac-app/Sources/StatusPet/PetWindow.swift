@@ -47,6 +47,11 @@ final class PetView: NSView {
 
     var menuProvider: (() -> NSMenu)?
 
+    /// Short text for the thought bubble. Nil hides the bubble entirely.
+    var caption: String? {
+        didSet { needsDisplay = true }
+    }
+
     /// Fired on a click that wasn't a drag.
     var onClick: (() -> Void)?
 
@@ -117,9 +122,10 @@ final class PetView: NSView {
             offsetX = sin(phase * 22) * 1.5
         }
 
+        // Anchored low in the window so the thought bubble has room above.
         let origin = NSPoint(
             x: (bounds.width - spriteWidth) / 2 + offsetX,
-            y: (bounds.height - spriteHeight) / 2 + offsetY
+            y: 26 + offsetY
         )
 
         if mood == .waiting {
@@ -140,6 +146,56 @@ final class PetView: NSView {
         if let badge = remoteBadge {
             drawRemoteBadge(badge, origin: origin, spriteWidth: spriteWidth)
         }
+
+        if let caption {
+            drawThoughtBubble(caption, above: NSRect(
+                x: origin.x, y: origin.y, width: spriteWidth, height: spriteHeight
+            ))
+        }
+    }
+
+    /// A thought bubble above the pet naming what it's actually doing —
+    /// the tool in flight, or why it stopped.
+    private func drawThoughtBubble(_ text: String, above sprite: NSRect) {
+        let font = NSFont.systemFont(ofSize: 10, weight: .semibold)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white
+        ]
+
+        // Keep long tool names from pushing the bubble past the window edge.
+        var label = text
+        let maxTextWidth = bounds.width - 22
+        while (label as NSString).size(withAttributes: attributes).width > maxTextWidth,
+              label.count > 4 {
+            label = String(label.dropLast())
+        }
+        if label != text { label += "…" }
+
+        let textSize = (label as NSString).size(withAttributes: attributes)
+        let padX: CGFloat = 7
+        let padY: CGFloat = 3
+
+        let bubble = NSRect(
+            x: (bounds.width - (textSize.width + padX * 2)) / 2,
+            y: sprite.maxY + 15,
+            width: textSize.width + padX * 2,
+            height: textSize.height + padY * 2
+        )
+
+        let ink = NSColor(calibratedRed: 0.11, green: 0.12, blue: 0.15, alpha: 0.94)
+        ink.setFill()
+
+        // Two trailing puffs, so it reads as a thought rather than speech.
+        NSBezierPath(ovalIn: NSRect(x: sprite.midX - 1, y: sprite.maxY + 3, width: 4, height: 4)).fill()
+        NSBezierPath(ovalIn: NSRect(x: sprite.midX + 2, y: sprite.maxY + 8, width: 6, height: 6)).fill()
+
+        NSBezierPath(roundedRect: bubble, xRadius: 7, yRadius: 7).fill()
+
+        (label as NSString).draw(
+            at: NSPoint(x: bubble.minX + padX, y: bubble.minY + padY),
+            withAttributes: attributes
+        )
     }
 
     private func drawCritter(origin: NSPoint, alpha: CGFloat, stepping: Bool) {
