@@ -1,88 +1,106 @@
 import AppKit
 
-/// One pet per agent.
+/// Owns the pet and routes events to it.
 ///
-/// `agent_source` has been on the wire since the first version, and petdex
-/// reserves the same field for "route per-pet when we ship multi-mascot". This
-/// is that routing: Claude Code, Codex and anything else that speaks the
-/// protocol each get their own critter, their own session list and their own
-/// saved position, rather than fighting over one window.
-///
-/// Sessions from different agents were never comparable anyway — collapsing
-/// Codex's "waiting" and Claude's "working" into a single mood produces a pet
-/// that is lying about both.
+/// `agent_source` is parsed off every event and used to decide whether we care
+/// about it. Today only Claude Code gets a pet; see the TODO below.
 final class PetPack {
-    /// The agent that always has a pet, even with nothing running. Without it
-    /// the desktop would be empty until the first event, and you'd have no way
-    /// to tell "idle" from "not installed".
+    /// The only agent with a pet right now.
     static let primary = "claude-code"
 
-    private var pets: [String: PetController] = [:]
-    /// Insertion order, so a pet doesn't jump position when another appears.
-    private var order: [String] = []
+    private let claude = PetController(store: SessionStore(), agent: primary, slot: 0)
+    /// Agents already reported as ignored, so a busy one says so once.
+    private var reported: Set<String> = []
 
     init() {
-        _ = pet(for: Self.primary)
+        claude.show()
     }
 
     func apply(_ event: StateEvent) {
-        let controller = pet(for: event.agentSource)
-        controller.store.apply(event)
-        pruneEmptyPets()
-    }
-
-    /// Called on the sweep timer as well as on events, so a pet whose sessions
-    /// all timed out goes away without needing one more packet to notice.
-    func pruneEmptyPets() {
-        for (agent, controller) in pets where agent != Self.primary {
-            guard controller.store.sessions.isEmpty else { continue }
-            controller.close()
-            pets[agent] = nil
-            order.removeAll { $0 == agent }
+        // Events from other agents are dropped rather than folded in — a Codex
+        // session showing up as one of Claude's would misreport both.
+        guard event.agentSource == Self.primary else {
+            report(event.agentSource)
+            return
         }
-        relabel()
+        claude.store.apply(event)
     }
 
-    private func pet(for agent: String) -> PetController {
-        if let existing = pets[agent] { return existing }
-
-        let controller = PetController(
-            store: SessionStore(),
-            agent: agent,
-            slot: order.count
-        )
-        pets[agent] = controller
-        order.append(agent)
-        controller.show()
-        relabel()
-        return controller
+    /// Said out loud because the event passed every other check to get here.
+    /// Dropping it silently would look like the tunnel was broken.
+    private func report(_ agent: String) {
+        guard reported.insert(agent).inserted else { return }
+        FileHandle.standardError.write(Data(
+            "claude-status: ignoring events from '\(agent)' — only \(Self.primary) has a pet\n".utf8))
     }
 
-    /// The agent name is only worth screen space when there's something to tell
-    /// apart. One pet on its own is unambiguous.
-    private func relabel() {
-        let showNames = pets.count > 1
-        for (agent, controller) in pets {
-            controller.agentLabel = showNames ? Self.displayName(agent) : nil
-        }
-    }
+    // MARK: - TODO: one pet per agent
+    //
+    // Parked, not abandoned. This worked — Codex, opencode and anything else
+    // speaking the protocol each got its own critter, session list, colour and
+    // saved position, routed on `agent_source`. It's shelved until there's a
+    // second agent actually worth watching on this desktop.
+    //
+    // To restore: swap the single `claude` controller for the registry below,
+    // call `pruneEmptyPets()` from the sweep timer in main.swift, and drop the
+    // `guard` in `apply`.
+    //
+    // petdex reserves the same field for this — "stamp agent_source so the
+    // sidecar can route per-pet when we ship multi-mascot" — and doesn't route
+    // on it either, so there's no interop cost to leaving it off.
+    //
+    //     private var pets: [String: PetController] = [:]
+    //     /// Insertion order, so a pet doesn't jump when another appears.
+    //     private var order: [String] = []
+    //
+    //     private func pet(for agent: String) -> PetController {
+    //         if let existing = pets[agent] { return existing }
+    //         let controller = PetController(store: SessionStore(),
+    //                                        agent: agent, slot: order.count)
+    //         pets[agent] = controller
+    //         order.append(agent)
+    //         controller.show()
+    //         relabel()
+    //         return controller
+    //     }
+    //
+    //     /// Sessions expire on a timer as well as on SessionEnd, so a pet whose
+    //     /// agent went quiet needs a nudge to notice it has nothing left.
+    //     func pruneEmptyPets() {
+    //         for (agent, controller) in pets where agent != Self.primary {
+    //             guard controller.store.sessions.isEmpty else { continue }
+    //             controller.close()
+    //             pets[agent] = nil
+    //             order.removeAll { $0 == agent }
+    //         }
+    //         relabel()
+    //     }
+    //
+    //     /// The agent name is only worth screen space when there's something to
+    //     /// tell apart. One pet on its own is unambiguous.
+    //     private func relabel() {
+    //         let showNames = pets.count > 1
+    //         for (agent, controller) in pets {
+    //             controller.agentLabel = showNames ? Self.displayName(agent) : nil
+    //         }
+    //     }
+    //
+    //     static func displayName(_ agent: String) -> String {
+    //         switch agent {
+    //         case "claude-code": return "Claude"
+    //         case "codex":       return "Codex"
+    //         case "opencode":    return "opencode"
+    //         case "antigravity": return "Antigravity"
+    //         default:            return agent.capitalized
+    //         }
+    //     }
 
-    static func displayName(_ agent: String) -> String {
-        switch agent {
-        case "claude-code": return "Claude"
-        case "codex":       return "Codex"
-        case "opencode":    return "opencode"
-        case "antigravity": return "Antigravity"
-        default:            return agent.capitalized
-        }
-    }
-
-    /// A stable colour per agent so you learn which pet is which by sight.
-    /// Claude keeps the clay it was drawn in; everyone else gets a hue derived
-    /// from their name, which is deterministic without needing a table.
+    /// A stable colour per agent, so pets stay distinguishable if the block
+    /// above comes back. Claude keeps the clay it was drawn in; everyone else
+    /// gets a hue derived from their name, deterministic without a table.
     static func tint(for agent: String) -> NSColor {
         if agent == primary {
-            return NSColor(calibratedRed: 0.843, green: 0.471, blue: 0.353, alpha: 1)
+            return PetView.clay
         }
         var hash: UInt64 = 5381
         for byte in agent.utf8 { hash = hash &* 33 &+ UInt64(byte) }

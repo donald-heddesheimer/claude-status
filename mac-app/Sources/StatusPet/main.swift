@@ -28,12 +28,9 @@ application.setActivationPolicy(.accessory)
 let pack = PetPack()
 let users = UserFilter.load()
 
-// Sessions also disappear on a timer, not only on SessionEnd, so a pet whose
-// agent went quiet needs a nudge to notice it has nothing left to show.
-let reaper = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { _ in
-    pack.pruneEmptyPets()
-}
-RunLoop.main.add(reaper, forMode: .common)
+// TODO: with one pet per agent, a sweep timer here calls pack.pruneEmptyPets()
+// so a pet whose agent went quiet closes without waiting for one more packet.
+// Not needed while the only pet is permanent — see PetPack.
 
 // CLAUDE_STATUS_DEBUG=1 prints every event as it lands. The pet is a glance, so
 // when it says something you don't recognise — a stray "allow Bash?" from a

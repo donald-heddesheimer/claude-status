@@ -317,25 +317,22 @@ work.
 
 ---
 
-## Multiple agents
+## Other agents
 
-Every event carries `agent_source`, and each agent gets **its own pet** — its own
-session list, its own saved position, its own colour. Claude Code keeps the clay
-it was drawn in; other agents get a hue derived from their name, so you learn
-which pet is which by sight. The name only appears under the critter when
-there's more than one pet, since a lone pet needs no label.
+Every event carries `agent_source`. Today the pet reads it and **ignores
+anything that isn't Claude Code** — a Codex session is dropped rather than folded
+in, since showing it as one of Claude's would misreport both.
 
-Sessions from different agents were never comparable anyway. Collapsing Codex's
-"waiting" and Claude's "working" into a single mood produces a pet that is lying
-about both.
-
-The Claude Code pet is always present, so an empty desktop still tells you the
-difference between *idle* and *not installed*. Other agents' pets appear on their
-first event and leave when their last session does.
+One pet per agent is written and working, but parked: each agent got its own
+critter, session list, colour and saved position. It's commented out in
+[`PetPack.swift`](mac-app/Sources/StatusPet/PetPack.swift) behind a `TODO` with
+instructions for switching it back on, waiting on a second agent actually worth
+watching.
 
 > [petdex](https://github.com/agiagentsdev/agentpets-dev) reserves the same field
-> for this — *"stamp `agent_source` so the sidecar can route per-pet when we ship
-> multi-mascot"* — but doesn't route on it yet. This is that routing.
+> for the same purpose — *"stamp `agent_source` so the sidecar can route per-pet
+> when we ship multi-mascot"* — and doesn't route on it either, so there's no
+> interop cost to leaving it off.
 
 Sessions that stop reporting are dropped on a timer, with the deadline
 depending on what they were doing. A *working* session going quiet means
@@ -416,7 +413,7 @@ A client that doesn't set a JSON content type won't be accepted.
 | `hooks/emit.sh` | Reads the hook payload, posts state; dependency-free, always exits 0 |
 | `mac-app/…/StateServer.swift` | Loopback HTTP listener on `Network.framework` |
 | `mac-app/…/SessionStore.swift` | Tracks every session, collapses them to one mood |
-| `mac-app/…/PetPack.swift` | One pet per agent, routed on `agent_source` |
+| `mac-app/…/PetPack.swift` | Routes events by `agent_source`; per-agent pets parked behind a TODO |
 | `mac-app/…/PetAnimator.swift` | Poses the critter each frame |
 | `mac-app/…/UserFilter.swift` | Keeps other accounts off your pet on a shared host |
 | `mac-app/…/PetSprite.swift` | The critter's pixel map |
