@@ -41,8 +41,21 @@ final class SessionStore {
 
     private static let busyStates: Set<String> = ["thinking", "working", "running"]
 
+    /// Ceiling on tracked sessions.
+    ///
+    /// The session id is attacker-chosen — anything that can reach loopback
+    /// picks it — so without a cap this dictionary grows for as long as someone
+    /// cares to keep posting. Nobody has 200 real sessions; past that the oldest
+    /// is evicted, which keeps the pet honest about the ones you actually have.
+    private static let maxSessions = 200
+
     private(set) var sessions: [String: Session] = [:]
     var onChange: (() -> Void)?
+
+    /// Injectable clock. Expiry is the one behaviour here that is defined purely
+    /// in terms of elapsed time, and a test that has to sleep for 90 seconds to
+    /// check a 90-second TTL is a test nobody runs.
+    private let now: () -> Date
 
     /// Session the pet is pinned to, or nil for "whatever needs you most".
     ///
@@ -64,7 +77,7 @@ final class SessionStore {
     }
 
     /// Pet lifetime and total traffic, for the hover panel's footer.
-    private let startedAt = Date()
+    private let startedAt: Date
     private(set) var eventCount = 0
 
     /// A session that stops reporting is presumed gone, but how long we wait
@@ -91,7 +104,12 @@ final class SessionStore {
         }
     }
 
-    init() {
+    /// `autoSweep: false` leaves expiry entirely to `sweep()`, which is what a
+    /// test wants — a timer firing underneath an assertion is a flake.
+    init(now: @escaping () -> Date = Date.init, autoSweep: Bool = true) {
+        self.now = now
+        self.startedAt = now()
+        guard autoSweep else { return }
         sweepTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             self?.sweep()
         }
@@ -104,7 +122,7 @@ final class SessionStore {
             sessions.removeValue(forKey: event.sessionID)
             if focus == event.sessionID { focus = nil }
         } else {
-            let now = Date()
+            let now = self.now()
             let previous = sessions[event.sessionID]
             sessions[event.sessionID] = Session(
                 state: event.state,
@@ -123,12 +141,27 @@ final class SessionStore {
                 // read higher than a few seconds.
                 stateSince: previous?.state == event.state ? (previous?.stateSince ?? now) : now
             )
+            evictOverflow()
         }
         onChange?()
     }
 
-    private func sweep() {
-        let now = Date()
+    /// Drops the least recently seen sessions once past the cap. Ordinary use
+    /// never reaches this; a flood of invented session ids does.
+    private func evictOverflow() {
+        guard sessions.count > Self.maxSessions else { return }
+        let doomed = sessions
+            .sorted { $0.value.seen < $1.value.seen }
+            .prefix(sessions.count - Self.maxSessions)
+            .map(\.key)
+        for key in doomed {
+            sessions.removeValue(forKey: key)
+            if focus == key { focus = nil }
+        }
+    }
+
+    func sweep() {
+        let now = self.now()
         let before = sessions.count
         sessions = sessions.filter { _, session in
             now.timeIntervalSince(session.seen) < ttl(for: session.state)
@@ -265,7 +298,7 @@ final class SessionStore {
 
     /// The full picture, for when a glance at the pet isn't enough.
     var stats: StatsReport {
-        let now = Date()
+        let now = self.now()
 
         let rows = sorted.map { $0.value }
             .map { session -> SessionRow in
