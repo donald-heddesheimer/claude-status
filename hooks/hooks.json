@@ -1,0 +1,71 @@
+{
+  "description": "claude-status: emit session lifecycle state to the desktop pet on 127.0.0.1:7777",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh\" thinking"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh\" working"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh\" working"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh\" waiting"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh\" idle"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/emit.sh\" gone"
+          }
+        ]
+      }
+    ]
+  }
+}

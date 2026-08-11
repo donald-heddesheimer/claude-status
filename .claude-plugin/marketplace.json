@@ -1,0 +1,19 @@
+{
+  "name": "claude-status",
+  "description": "Floating desktop pet that reacts to Claude Code session state, locally or over SSH.",
+  "owner": {
+    "name": "donaldheddesheimer"
+  },
+  "plugins": [
+    {
+      "name": "claude-status",
+      "description": "Emits Claude Code lifecycle state to a floating desktop pet. Works for local sessions and for sessions running on a remote host over SSH.",
+      "author": {
+        "name": "donaldheddesheimer"
+      },
+      "category": "productivity",
+      "source": "./",
+      "homepage": "https://github.com/donaldheddesheimer/claude-status"
+    }
+  ]
+}

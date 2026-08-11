@@ -1,0 +1,14 @@
+.DS_Store
+
+# Per-machine Claude Code permission grants
+.claude/settings.local.json
+
+# Swift build products
+mac-app/.build/
+mac-app/.swiftpm/
+*.xcodeproj
+
+# Pet artwork is generated locally from the user's own Claude.app install so
+# the repo never redistributes Anthropic's icon.
+*.png
+!docs/*.png
