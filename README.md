@@ -166,6 +166,11 @@ field from `tool_input` that says what the call is *about* — the file for
 pattern for `Grep`, the host for `WebFetch`. The bubble reads as a phrase:
 `reading README.md`, `searching notification_type`, `Run the integration tests`.
 
+The bubble sits *beside* the pet rather than above it, so the text grows
+sideways into the window instead of squeezing itself over the pet's head. Only
+the critter takes clicks — the space held open for the bubble is click-through,
+so it never becomes an invisible target for whatever is behind it.
+
 `Notification` carries no tool name, so the pet keeps the one from the preceding
 `PreToolUse`. That's what turns a vague `needs you` into `allow Bash?` — enough
 to decide whether it's worth getting up for.

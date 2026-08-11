@@ -6,9 +6,10 @@ final class PetController: NSObject {
     private static let originKey = "com.claudestatus.petOrigin"
     // Tall enough for the thought bubble above the pet, wide enough that the
     // attention pulse never clips at the edges.
-    // Wide enough for a readable thought bubble; tall enough to fit it above
-    // the pet without the attention pulse clipping at the edges.
-    private static let size = NSSize(width: 210, height: 190)
+    // The critter is anchored to the left of this window; the rest is room for
+    // the thought bubble to grow into beside it. Height is just the critter
+    // plus enough margin that the attention pulse never clips.
+    private static let size = NSSize(width: 400, height: 132)
     /// Gap between the pet and the hover panel.
     private static let statsGap: CGFloat = 10
 

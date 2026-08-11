@@ -63,6 +63,22 @@ final class PetView: NSView {
 
     private let cell: CGFloat = 8
 
+    /// Clearance around the critter, sized so the attention pulse never clips.
+    private static let spriteMargin: CGFloat = 26
+    /// Gap between the critter and its thought bubble, clear of the pulse ring.
+    private static let bubbleGap: CGFloat = 30
+
+    /// Where the critter sits at rest, before any animation offset. Anchored to
+    /// the left of the window so the bubble has room beside it.
+    private var spriteFrame: NSRect {
+        NSRect(
+            x: Self.spriteMargin,
+            y: Self.spriteMargin,
+            width: CGFloat(PetSprite.columns) * cell,
+            height: CGFloat(PetSprite.rows) * cell
+        )
+    }
+
     // MARK: - Animation
 
     /// Only animate when something is happening. Idle and asleep cost no CPU.
@@ -101,8 +117,9 @@ final class PetView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        let spriteWidth = CGFloat(PetSprite.columns) * cell
-        let spriteHeight = CGFloat(PetSprite.rows) * cell
+        let base = spriteFrame
+        let spriteWidth = base.width
+        let spriteHeight = base.height
 
         var offsetX: CGFloat = 0
         var offsetY: CGFloat = 0
@@ -125,11 +142,7 @@ final class PetView: NSView {
             offsetX = sin(phase * 22) * 1.5
         }
 
-        // Anchored low in the window so the thought bubble has room above.
-        let origin = NSPoint(
-            x: (bounds.width - spriteWidth) / 2 + offsetX,
-            y: 26 + offsetY
-        )
+        let origin = NSPoint(x: base.minX + offsetX, y: base.minY + offsetY)
 
         if mood == .waiting {
             drawAttentionPulse(around: NSRect(
@@ -151,24 +164,32 @@ final class PetView: NSView {
         }
 
         if let caption {
-            drawThoughtBubble(caption, above: NSRect(
+            drawThoughtBubble(caption, beside: NSRect(
                 x: origin.x, y: origin.y, width: spriteWidth, height: spriteHeight
             ))
         }
     }
 
-    /// A thought bubble above the pet naming what it's actually doing —
-    /// the tool in flight, or why it stopped.
-    private func drawThoughtBubble(_ text: String, above sprite: NSRect) {
+    /// A thought bubble beside the pet naming what it's actually doing — the
+    /// tool in flight, or why it stopped.
+    ///
+    /// Sitting alongside rather than above means the text grows into the window
+    /// instead of over the pet's head, so a phrase like "editing
+    /// SessionStore.swift" fits without shrinking to nothing.
+    private func drawThoughtBubble(_ text: String, beside sprite: NSRect) {
         let font = NSFont.systemFont(ofSize: 10, weight: .semibold)
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: NSColor.white
         ]
 
-        // Keep long tool names from pushing the bubble past the window edge.
+        let padX: CGFloat = 7
+        let padY: CGFloat = 3
+        let left = sprite.maxX + Self.bubbleGap
+
+        // Keep long phrases from pushing the bubble past the window edge.
         var label = text
-        let maxTextWidth = bounds.width - 22
+        let maxTextWidth = bounds.width - left - padX * 2 - 6
         while (label as NSString).size(withAttributes: attributes).width > maxTextWidth,
               label.count > 4 {
             label = String(label.dropLast())
@@ -176,22 +197,24 @@ final class PetView: NSView {
         if label != text { label += "…" }
 
         let textSize = (label as NSString).size(withAttributes: attributes)
-        let padX: CGFloat = 7
-        let padY: CGFloat = 3
+        let height = textSize.height + padY * 2
 
         let bubble = NSRect(
-            x: (bounds.width - (textSize.width + padX * 2)) / 2,
-            y: sprite.maxY + 15,
+            x: left,
+            y: sprite.midY - height / 2,
             width: textSize.width + padX * 2,
-            height: textSize.height + padY * 2
+            height: height
         )
 
         let ink = NSColor(calibratedRed: 0.11, green: 0.12, blue: 0.15, alpha: 0.94)
         ink.setFill()
 
-        // Two trailing puffs, so it reads as a thought rather than speech.
-        NSBezierPath(ovalIn: NSRect(x: sprite.midX - 1, y: sprite.maxY + 3, width: 4, height: 4)).fill()
-        NSBezierPath(ovalIn: NSRect(x: sprite.midX + 2, y: sprite.maxY + 8, width: 6, height: 6)).fill()
+        // Two puffs trailing back toward the pet, so it reads as a thought
+        // rather than speech.
+        NSBezierPath(ovalIn: NSRect(
+            x: sprite.maxX + 9, y: sprite.midY - 2, width: 4, height: 4)).fill()
+        NSBezierPath(ovalIn: NSRect(
+            x: sprite.maxX + 17, y: sprite.midY - 3.5, width: 7, height: 7)).fill()
 
         NSBezierPath(roundedRect: bubble, xRadius: 7, yRadius: 7).fill()
 
@@ -291,14 +314,15 @@ final class PetView: NSView {
     /// panel is transparent padding for the bubble and the pulse, and a stats
     /// card that appeared from empty space would feel broken.
     private var petRect: NSRect {
-        let spriteWidth = CGFloat(PetSprite.columns) * cell
-        let spriteHeight = CGFloat(PetSprite.rows) * cell
-        return NSRect(
-            x: (bounds.width - spriteWidth) / 2,
-            y: 26,
-            width: spriteWidth,
-            height: spriteHeight
-        ).insetBy(dx: -8, dy: -8)
+        spriteFrame.insetBy(dx: -8, dy: -8)
+    }
+
+    /// Only the critter is live. The rest of the window is transparent space
+    /// held open for the bubble, and a click there should reach whatever is
+    /// behind the pet rather than being swallowed by an invisible target.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        return petRect.contains(local) ? self : nil
     }
 
     override func updateTrackingAreas() {
