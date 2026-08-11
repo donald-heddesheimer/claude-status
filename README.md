@@ -5,10 +5,11 @@ sessions running on a **remote host over SSH**.
 
 It shuffles its feet while Claude works, jitters with a pulsing ring when Claude
 is blocked waiting on you, and shuts its eyes when nothing is running. A thought
-bubble names the tool in flight. Sessions on a remote machine carry a badge with
-that host's initial, so you can tell at a glance which box wants your attention.
+bubble says what Claude is actually doing — `editing SessionStore.swift`, not
+`Edit`. Sessions on a remote machine carry a badge with that host's initial, so
+you can tell at a glance which box wants your attention.
 
-Click it to bring Claude to the front.
+Hover for the full picture; click to bring Claude to the front.
 
 ---
 
@@ -154,13 +155,20 @@ per-session setup.
 | Hook event | Pet | Bubble |
 |---|---|---|
 | `UserPromptSubmit` | bobs, legs shuffling, eyes squint | `thinking` |
-| `PreToolUse` / `PostToolUse` | bobs, legs shuffling, eyes squint | the tool name |
-| `Notification` | jitters with a pulsing ring — **blocked on you** | `needs you` |
+| `PreToolUse` / `PostToolUse` | bobs, legs shuffling, eyes squint | `editing PetView.swift` |
+| `Notification` | jitters with a pulsing ring — **blocked on you** | `allow Bash?` |
 | `Stop` | settles, eyes open — idle | — |
 | `SessionEnd` | forgets the session | — |
 
-The thought bubble reports the most recent tool in flight, so a glance tells you
-not just that Claude is busy but what it's busy doing. It stays quiet when idle.
+A bare tool name is true of half the session, so the hook also scrapes the one
+field from `tool_input` that says what the call is *about* — the file for
+`Read`/`Edit`, Claude's own one-line description for `Bash` and `Task`, the
+pattern for `Grep`, the host for `WebFetch`. The bubble reads as a phrase:
+`reading README.md`, `searching notification_type`, `Run the integration tests`.
+
+`Notification` carries no tool name, so the pet keeps the one from the preceding
+`PreToolUse`. That's what turns a vague `needs you` into `allow Bash?` — enough
+to decide whether it's worth getting up for.
 
 **Not every notification means "needs you".** The `Notification` hook covers a
 whole family of events, including one that fires 60s after a turn ends (*"Claude
@@ -175,6 +183,30 @@ than a missed one.
 notification for about 6 seconds and skips it entirely if you've touched the
 session in that window, so prompts you answer immediately never reach the pet.
 That's the intended behaviour: the pet is for the prompts you walked away from.
+
+### Hover for detail
+
+The bubble is a glance. Hovering the pet opens a panel with every session it
+knows about — where it's running, which project, what it's doing, and how long
+it's been doing it — plus the pet's own uptime and event count at the bottom.
+Whatever needs you sorts to the top and is tinted.
+
+```
+┌──────────────────────────────────────────┐
+│  2 sessions · 1 needs you                │
+│  ────────────────────────────────────    │
+│  devbox (ssh) — drone-es-rd              │
+│  waiting · allow Bash? · 4m              │
+│  ────────────────────────────────────    │
+│  local — claude-status                   │
+│  working · editing PetWindow.swift · 12s │
+│  ────────────────────────────────────    │
+│  up 3h 20m · 412 events                  │
+└──────────────────────────────────────────┘
+```
+
+The panel is click-through and picks whichever side of the pet has room, so it
+works in any screen corner.
 
 **Idle vs. nothing running.** *Idle* means a session is alive and reporting but
 not working — Claude finished its turn and is waiting for you to type. *Nothing

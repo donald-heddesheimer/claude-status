@@ -50,6 +50,38 @@ SESSION_ID="$(sanitize "$(json_str session_id)")"
 TOOL="$(sanitize "$(json_str tool_name)")"
 CWD="$(sanitize "$(json_str cwd)")"
 
+# A bare tool name says almost nothing — "Bash" and "Edit" are true of half the
+# session. Pull the one field from tool_input that says what this call is
+# actually about, so the pet can show "running tests" instead of "Bash".
+# json_str scrapes the flat text, so nested tool_input keys resolve fine.
+case "$TOOL" in
+  Bash|BashOutput)
+    # Claude writes a short description for every Bash call; it beats anything
+    # we could derive from the command line itself.
+    DETAIL="$(json_str description)"
+    [ -n "$DETAIL" ] || DETAIL="$(json_str command | cut -d' ' -f1)"
+    ;;
+  Read|Edit|Write|MultiEdit|NotebookEdit)
+    DETAIL="$(basename "$(json_str file_path)" 2>/dev/null)"
+    ;;
+  Grep|Glob)
+    DETAIL="$(json_str pattern)"
+    ;;
+  WebFetch)
+    DETAIL="$(json_str url | sed -e 's|^[a-z]*://||' -e 's|/.*||')"
+    ;;
+  WebSearch)
+    DETAIL="$(json_str query)"
+    ;;
+  Task|Agent)
+    DETAIL="$(json_str description)"
+    ;;
+  *)
+    DETAIL=""
+    ;;
+esac
+DETAIL="$(sanitize "$DETAIL")"
+
 # The Notification hook fires for a whole family of events, only some of which
 # mean "a human has to answer something". Notably it also fires 60s after a turn
 # ends ("Claude is waiting for your input", notification_type=idle_prompt) —
@@ -89,7 +121,7 @@ else
   REMOTE="false"
 fi
 
-BODY="{\"state\":\"${STATE}\",\"session_id\":\"${SESSION_ID}\",\"host\":\"${HOSTNAME_SHORT}\",\"remote\":${REMOTE},\"tool\":\"${TOOL}\",\"cwd\":\"${CWD}\",\"agent_source\":\"claude-code\"}"
+BODY="{\"state\":\"${STATE}\",\"session_id\":\"${SESSION_ID}\",\"host\":\"${HOSTNAME_SHORT}\",\"remote\":${REMOTE},\"tool\":\"${TOOL}\",\"detail\":\"${DETAIL}\",\"cwd\":\"${CWD}\",\"agent_source\":\"claude-code\"}"
 
 TOKEN=""
 if [ -r "$TOKEN_FILE" ]; then

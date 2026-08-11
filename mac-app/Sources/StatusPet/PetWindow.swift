@@ -55,6 +55,9 @@ final class PetView: NSView {
     /// Fired on a click that wasn't a drag.
     var onClick: (() -> Void)?
 
+    /// Fired when the cursor enters or leaves the pet itself.
+    var onHover: ((Bool) -> Void)?
+
     private var phase: CGFloat = 0
     private var timer: Timer?
 
@@ -283,6 +286,36 @@ final class PetView: NSView {
     }
 
     // MARK: - Interaction
+
+    /// Hover is tracked over the critter, not the whole window. Most of the
+    /// panel is transparent padding for the bubble and the pulse, and a stats
+    /// card that appeared from empty space would feel broken.
+    private var petRect: NSRect {
+        let spriteWidth = CGFloat(PetSprite.columns) * cell
+        let spriteHeight = CGFloat(PetSprite.rows) * cell
+        return NSRect(
+            x: (bounds.width - spriteWidth) / 2,
+            y: 26,
+            width: spriteWidth,
+            height: spriteHeight
+        ).insetBy(dx: -8, dy: -8)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        // .activeAlways: the pet is an accessory app and is never the key
+        // window, so anything less never fires.
+        addTrackingArea(NSTrackingArea(
+            rect: petRect,
+            options: [.mouseEnteredAndExited, .activeAlways],
+            owner: self,
+            userInfo: nil
+        ))
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHover?(true) }
+    override func mouseExited(with event: NSEvent) { onHover?(false) }
 
     override func mouseDown(with event: NSEvent) {
         // performDrag runs its own event loop and returns on mouse-up, so

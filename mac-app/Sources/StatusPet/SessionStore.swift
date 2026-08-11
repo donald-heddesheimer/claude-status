@@ -8,6 +8,22 @@ enum PetMood {
     case waiting  // needs you — permission prompt or input
 }
 
+/// One line of the hover panel: what a single session is doing.
+struct SessionRow {
+    let place: String    // "devbox (ssh)" or "local"
+    let project: String  // last path component of the session's cwd
+    let detail: String   // "working · Bash"
+    let age: String      // time in the current state
+    let isWaiting: Bool
+}
+
+/// Everything the hover panel shows.
+struct StatsReport {
+    let headline: String
+    let rows: [SessionRow]
+    let footer: String
+}
+
 /// Tracks every Claude Code session reporting in, local and remote alike, and
 /// collapses them into a single mood for the pet.
 final class SessionStore {
@@ -16,11 +32,21 @@ final class SessionStore {
         var host: String
         var remote: Bool
         var tool: String
-        var seen: Date
+        var detail: String
+        var cwd: String
+        var seen: Date        // last ping of any kind
+        var firstSeen: Date   // when this session first reported
+        var stateSince: Date  // when it entered the state it's in now
     }
+
+    private static let busyStates: Set<String> = ["thinking", "working", "running"]
 
     private(set) var sessions: [String: Session] = [:]
     var onChange: (() -> Void)?
+
+    /// Pet lifetime and total traffic, for the hover panel's footer.
+    private let startedAt = Date()
+    private(set) var eventCount = 0
 
     /// A session that stops reporting is presumed gone, but how long we wait
     /// depends on what it was doing.
@@ -53,15 +79,29 @@ final class SessionStore {
     }
 
     func apply(_ event: StateEvent) {
+        eventCount += 1
+
         if event.state == "gone" {
             sessions.removeValue(forKey: event.sessionID)
         } else {
+            let now = Date()
+            let previous = sessions[event.sessionID]
             sessions[event.sessionID] = Session(
                 state: event.state,
                 host: event.host,
                 remote: event.remote,
-                tool: event.tool,
-                seen: Date()
+                // Notification and Stop carry no tool, but what the session was
+                // last doing is exactly what you want to know when it stops to
+                // ask permission. Carry it forward rather than blanking it.
+                tool: event.tool.isEmpty ? (previous?.tool ?? "") : event.tool,
+                detail: event.tool.isEmpty ? (previous?.detail ?? "") : event.detail,
+                cwd: event.cwd.isEmpty ? (previous?.cwd ?? "") : event.cwd,
+                seen: now,
+                firstSeen: previous?.firstSeen ?? now,
+                // Only restart the clock on a real transition. Otherwise every
+                // PostToolUse ping would reset it and "working 6m" could never
+                // read higher than a few seconds.
+                stateSince: previous?.state == event.state ? (previous?.stateSince ?? now) : now
             )
         }
         onChange?()
@@ -81,8 +121,7 @@ final class SessionStore {
     var mood: PetMood {
         if sessions.isEmpty { return .asleep }
         if sessions.values.contains(where: { $0.state == "waiting" }) { return .waiting }
-        let busyStates: Set<String> = ["thinking", "working", "running"]
-        if sessions.values.contains(where: { busyStates.contains($0.state) }) { return .busy }
+        if sessions.values.contains(where: { Self.busyStates.contains($0.state) }) { return .busy }
         return .idle
     }
 
@@ -103,15 +142,41 @@ final class SessionStore {
         case .asleep, .idle:
             return nil
         case .waiting:
+            // Name the tool it's blocked on, so you know whether it's worth
+            // getting up for before you get up.
+            let blocked = sessions.values.first { $0.state == "waiting" }
+            if let tool = blocked?.tool, !tool.isEmpty { return "allow \(tool)?" }
             return "needs you"
         case .busy:
-            let busyStates: Set<String> = ["thinking", "working", "running"]
             let working = sessions.values
-                .filter { busyStates.contains($0.state) }
+                .filter { Self.busyStates.contains($0.state) }
                 .sorted { $0.seen > $1.seen }
 
-            guard let latest = working.first else { return "thinking" }
-            return latest.tool.isEmpty ? "thinking" : latest.tool
+            guard let latest = working.first, !latest.tool.isEmpty else { return "thinking" }
+            return Self.phrase(tool: latest.tool, detail: latest.detail)
+        }
+    }
+
+    /// Turn a tool call into something worth reading. "Bash" and "Edit" are true
+    /// of half the session; "editing SessionStore.swift" actually tells you
+    /// where Claude is.
+    static func phrase(tool: String, detail: String) -> String {
+        guard !detail.isEmpty else { return tool.lowercased() }
+
+        switch tool {
+        case "Read":
+            return "reading \(detail)"
+        case "Edit", "Write", "MultiEdit", "NotebookEdit":
+            return "editing \(detail)"
+        case "Grep", "Glob":
+            return "searching \(detail)"
+        case "WebFetch", "WebSearch":
+            return "looking up \(detail)"
+        case "Bash", "BashOutput", "Task", "Agent":
+            // These already arrive as a written description of the work.
+            return detail
+        default:
+            return "\(tool.lowercased()) \(detail)"
         }
     }
 
@@ -125,5 +190,77 @@ final class SessionStore {
                 let detail = session.tool.isEmpty ? session.state : "\(session.state) · \(session.tool)"
                 return "\(where_) — \(detail)"
             }
+    }
+
+    // MARK: - Hover panel
+
+    /// The full picture, for when a glance at the pet isn't enough.
+    var stats: StatsReport {
+        let now = Date()
+
+        let rows = sessions.values
+            // Whatever needs you first, then most recently active.
+            .sorted { a, b in
+                if (a.state == "waiting") != (b.state == "waiting") { return a.state == "waiting" }
+                return a.seen > b.seen
+            }
+            .map { session -> SessionRow in
+                var detail = session.state
+                if session.state == "waiting" {
+                    detail = session.tool.isEmpty
+                        ? "waiting for you"
+                        : "waiting · allow \(session.tool)?"
+                } else if !session.tool.isEmpty, Self.busyStates.contains(session.state) {
+                    detail = "\(session.state) · \(Self.phrase(tool: session.tool, detail: session.detail))"
+                }
+                return SessionRow(
+                    place: session.remote ? "\(session.host) (ssh)" : "local",
+                    project: Self.projectName(session.cwd),
+                    detail: detail,
+                    age: Self.duration(now.timeIntervalSince(session.stateSince)),
+                    isWaiting: session.state == "waiting"
+                )
+            }
+
+        return StatsReport(
+            headline: headline,
+            rows: rows,
+            footer: "up \(Self.duration(now.timeIntervalSince(startedAt))) · "
+                + "\(eventCount) event\(eventCount == 1 ? "" : "s")"
+        )
+    }
+
+    private var headline: String {
+        if sessions.isEmpty { return "Nothing running" }
+
+        let count = sessions.count
+        var parts = ["\(count) session\(count == 1 ? "" : "s")"]
+
+        let waiting = sessions.values.filter { $0.state == "waiting" }.count
+        let busy = sessions.values.filter { Self.busyStates.contains($0.state) }.count
+
+        if waiting > 0 {
+            parts.append("\(waiting) needs you")
+        } else if busy > 0 {
+            parts.append("\(busy) working")
+        } else {
+            parts.append("all idle")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func projectName(_ cwd: String) -> String {
+        let trimmed = cwd.hasSuffix("/") ? String(cwd.dropLast()) : cwd
+        return (trimmed as NSString).lastPathComponent
+    }
+
+    /// Coarse on purpose — the panel wants "4m", not "4m 12s".
+    private static func duration(_ interval: TimeInterval) -> String {
+        let seconds = Int(max(0, interval))
+        if seconds < 60 { return "\(seconds)s" }
+        if seconds < 3600 { return "\(seconds / 60)m" }
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        return minutes == 0 ? "\(hours)h" : "\(hours)h \(minutes)m"
     }
 }

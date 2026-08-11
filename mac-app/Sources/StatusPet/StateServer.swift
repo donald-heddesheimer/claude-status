@@ -8,6 +8,9 @@ struct StateEvent {
     let host: String
     let remote: Bool
     let tool: String
+    /// What this tool call is about — a filename, a Bash description, a search
+    /// pattern. Empty when the hook had nothing worth reporting.
+    let detail: String
     let cwd: String
 }
 
@@ -154,6 +157,7 @@ final class StateServer {
             host: json["host"] as? String ?? "local",
             remote: json["remote"] as? Bool ?? false,
             tool: json["tool"] as? String ?? "",
+            detail: json["detail"] as? String ?? "",
             cwd: json["cwd"] as? String ?? ""
         ))
     }

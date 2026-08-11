@@ -6,11 +6,17 @@ final class PetController: NSObject {
     private static let originKey = "com.claudestatus.petOrigin"
     // Tall enough for the thought bubble above the pet, wide enough that the
     // attention pulse never clips at the edges.
-    private static let size = NSSize(width: 170, height: 190)
+    // Wide enough for a readable thought bubble; tall enough to fit it above
+    // the pet without the attention pulse clipping at the edges.
+    private static let size = NSSize(width: 210, height: 190)
+    /// Gap between the pet and the hover panel.
+    private static let statsGap: CGFloat = 10
 
     private let store: SessionStore
     private let panel: PetPanel
     private let view: PetView
+    private let stats = StatsPanel()
+    private var statsTimer: Timer?
 
     init(store: SessionStore) {
         self.store = store
@@ -22,6 +28,9 @@ final class PetController: NSObject {
         view.petImage = Self.loadArt()
         view.menuProvider = { [weak self] in self?.buildMenu() ?? NSMenu() }
         view.onClick = { Self.openClaude() }
+        view.onHover = { [weak self] inside in
+            inside ? self?.showStats() : self?.hideStats()
+        }
         store.onChange = { [weak self] in self?.refresh() }
 
         NotificationCenter.default.addObserver(
@@ -77,6 +86,49 @@ final class PetController: NSObject {
         view.mood = store.mood
         view.remoteBadge = store.remoteBadge
         view.caption = store.caption
+        if stats.isVisible { layoutStats() }
+    }
+
+    // MARK: - Hover panel
+
+    private func showStats() {
+        layoutStats()
+        stats.orderFrontRegardless()
+
+        // The ages tick while you hover, so redraw on a slow timer rather than
+        // freezing whatever the numbers happened to be on entry.
+        statsTimer?.invalidate()
+        statsTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.layoutStats()
+        }
+    }
+
+    private func hideStats() {
+        statsTimer?.invalidate()
+        statsTimer = nil
+        stats.orderOut(nil)
+    }
+
+    /// Sizes the panel to its content and parks it beside the pet, flipping to
+    /// whichever side has room — the pet lives in a corner by default.
+    private func layoutStats() {
+        let size = stats.update(with: store.stats)
+        let pet = panel.frame
+        let screen = (panel.screen ?? NSScreen.main)?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+
+        var x = pet.minX - size.width - Self.statsGap
+        if x < screen.minX {
+            x = pet.maxX + Self.statsGap
+        }
+        // If neither side fits, hug the edge rather than sliding off-screen.
+        x = min(max(x, screen.minX + 4), screen.maxX - size.width - 4)
+
+        var y = pet.maxY - size.height
+        y = min(max(y, screen.minY + 4), screen.maxY - size.height - 4)
+
+        stats.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height),
+                       display: true)
     }
 
     // MARK: - Position
@@ -105,6 +157,8 @@ final class PetController: NSObject {
 
     @objc private func windowMoved() {
         UserDefaults.standard.set(NSStringFromPoint(panel.frame.origin), forKey: Self.originKey)
+        // Dragging the pet never fires mouseExited, so the panel has to follow.
+        if stats.isVisible { layoutStats() }
     }
 
     // MARK: - Menu
