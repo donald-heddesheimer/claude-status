@@ -3,6 +3,9 @@
 # Per-machine Claude Code permission grants
 .claude/settings.local.json
 
+# Personal launchers — machine-specific hostnames and paths
+scripts/local/
+
 # Swift build products
 mac-app/.build/
 mac-app/.swiftpm/

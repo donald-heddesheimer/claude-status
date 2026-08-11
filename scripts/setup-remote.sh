@@ -59,5 +59,5 @@ echo "   HTTP 200 and a pulsing pet means you're done."
 echo
 echo "== 4. Install the plugin on ${HOST} =="
 echo "   ssh ${HOST}, run claude, then:"
-echo "     /plugin marketplace add donaldheddesheimer/claude-status"
+echo "     /plugin marketplace add donald-heddesheimer/claude-status"
 echo "     /plugin install claude-status@claude-status"

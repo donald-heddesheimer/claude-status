@@ -56,7 +56,7 @@ drawn with AppKit, and the hook needs only `curl`.
 ### 1. The pet — on your Mac
 
 ```bash
-git clone https://github.com/donaldheddesheimer/claude-status
+git clone https://github.com/donald-heddesheimer/claude-status
 cd claude-status/mac-app && swift run
 ```
 
@@ -69,7 +69,7 @@ cd claude-status/mac-app && swift run
 ### 2. The plugin — on every machine running Claude Code
 
 ```
-/plugin marketplace add donaldheddesheimer/claude-status
+/plugin marketplace add donald-heddesheimer/claude-status
 /plugin install claude-status@claude-status
 ```
 
@@ -136,7 +136,7 @@ connection refused, the tunnel isn't up — recheck steps 2 and 3.
 **Step 5 — install the plugin on the remote host.**
 
 ```
-/plugin marketplace add donaldheddesheimer/claude-status
+/plugin marketplace add donald-heddesheimer/claude-status
 /plugin install claude-status@claude-status
 ```
 
