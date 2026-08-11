@@ -185,11 +185,36 @@ openssl rand -hex 16 | tee ~/.claude-status/token | ssh devbox 'mkdir -p ~/.clau
 
 | Hook event | Pet | Bubble |
 |---|---|---|
-| `UserPromptSubmit` | bobs, legs shuffling, eyes squint | `thinking` |
-| `PreToolUse` / `PostToolUse` | bobs, legs shuffling, eyes squint | `editing PetView.swift` |
-| `Notification` | jitters with a pulsing ring — **blocked on you** | `allow Bash?` |
-| `Stop` | settles, eyes open — idle | — |
+| `UserPromptSubmit` | bobs with squash and stretch, legs shuffling, eyes squint | `thinking` |
+| `PreToolUse` / `PostToolUse` | bobs with squash and stretch, legs shuffling, eyes squint | `editing PetView.swift` |
+| `Notification` | jitters and hops inside a pulsing ring, tapping a foot — **blocked on you** | `allow Bash?` |
+| `Stop` | settles, breathes, blinks — idle | — |
 | `SessionEnd` | forgets the session | — |
+
+### Motion
+
+The pet is never completely still, because a frozen sprite reads as a hung app.
+Every state has a resting behaviour and an entrance:
+
+| State | Resting | |
+|---|---|---|
+| asleep | slow breathing, lids down, `z` glyphs drifting off the head | |
+| idle | quicker breathing, blinks — singly, and in pairs about a third of the time | |
+| busy | bob, leg shuffle, blinks | |
+| waiting | jitter, a two-footed hop every 1.6s, an impatient foot tap between hops | |
+
+The bob carries **squash and stretch**, anchored at the feet — compressed on the
+ground, drawn out at the top. That's the difference between a sprite sliding up
+and down and one that has weight. The attention ring is fitted to the squashed
+silhouette, so a stretched pet never pokes out through its own pulse.
+
+Changing state plays a short damped spring, so you notice the change out of the
+corner of your eye rather than only when you look straight at it. Waking eases
+its opacity instead of switching it. Dropping off to sleep is exempt — that one
+should be quiet.
+
+Calm states run at 12fps rather than 30. Breathing and blinking read the same,
+and the pet is on screen all day.
 
 A bare tool name is true of half the session, so the hook also scrapes the one
 field from `tool_input` that says what the call is *about* — the file for

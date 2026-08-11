@@ -30,6 +30,7 @@ final class PetView: NSView {
     var mood: PetMood = .asleep {
         didSet {
             guard mood != oldValue else { return }
+            animator.set(mood: mood)
             syncAnimation()
             needsDisplay = true
         }
@@ -58,7 +59,8 @@ final class PetView: NSView {
     /// Fired when the cursor enters or leaves the pet itself.
     var onHover: ((Bool) -> Void)?
 
-    private var phase: CGFloat = 0
+    private let animator = PetAnimator()
+    private var pose = PetPose()
     private var timer: Timer?
 
     private let cell: CGFloat = 8
@@ -86,18 +88,20 @@ final class PetView: NSView {
 
     // MARK: - Animation
 
-    /// Only animate when something is happening. Idle and asleep cost no CPU.
+    /// The pet is never completely still — it breathes and blinks even with
+    /// nothing running, because a frozen sprite reads as a hung app. Calm states
+    /// pay for that at 12fps rather than 30.
     private func syncAnimation() {
         timer?.invalidate()
-        timer = nil
-        phase = 0
 
-        guard mood == .busy || mood == .waiting else { return }
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+        let interval = animator.frameInterval
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             guard let self else { return }
-            self.phase += 1.0 / 30.0
+            self.pose = self.animator.advance(by: interval)
             self.needsDisplay = true
         }
+        // Let it tick while a menu or a drag is spinning its own run loop.
+        RunLoop.main.add(timer!, forMode: .common)
     }
 
     deinit { timer?.invalidate() }
@@ -119,53 +123,49 @@ final class PetView: NSView {
 
     // MARK: - Drawing
 
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        syncAnimation()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("PetView is created in code only")
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
         let base = spriteFrame
-        let spriteWidth = base.width
-        let spriteHeight = base.height
+        let body = NSRect(
+            x: base.minX + pose.offset.width,
+            y: base.minY + pose.offset.height,
+            width: base.width,
+            height: base.height
+        )
 
-        var offsetX: CGFloat = 0
-        var offsetY: CGFloat = 0
-        var alpha: CGFloat = 1
-        var stepping = false
-
-        switch mood {
-        case .asleep:
-            alpha = 0.45
-        case .idle:
-            break
-        case .busy:
-            // Shuffle the legs and bob, so it reads as busy at a glance.
-            offsetY = abs(sin(phase * 5.0)) * 5
-            stepping = sin(phase * 10.0) > 0
-        case .waiting:
-            // Hold position but jitter, so it reads as "blocked", not "working".
-            // Stays fully opaque — a translucent pet reads as a rendering bug
-            // rather than as urgency.
-            offsetX = sin(phase * 22) * 1.5
+        if let sleep = pose.sleep {
+            drawSleep(sleep, over: base)
+        }
+        if let pulse = pose.pulse {
+            // Around the squashed silhouette, not the nominal frame: at the
+            // tightest part of the pulse a stretched pet would otherwise poke
+            // out through the top of its own ring.
+            drawAttentionPulse(around: squashed(body, by: pose.squash), progress: pulse)
         }
 
-        let origin = NSPoint(x: base.minX + offsetX, y: base.minY + offsetY)
-
-        if mood == .waiting {
-            drawAttentionPulse(around: NSRect(
-                x: origin.x, y: origin.y, width: spriteWidth, height: spriteHeight
-            ))
-        }
-
-        if let image = petImage {
-            image.draw(
-                in: NSRect(x: origin.x, y: origin.y, width: spriteWidth, height: spriteHeight),
-                from: .zero, operation: .sourceOver, fraction: alpha
-            )
-        } else {
-            drawCritter(origin: origin, alpha: alpha, stepping: stepping)
+        // Squash and stretch applies to the critter alone. The ring, the badge
+        // and the bubble are not made of the same rubber.
+        withSquash(pose.squash, footedAt: body) {
+            if let image = petImage {
+                image.draw(in: body, from: .zero, operation: .sourceOver, fraction: pose.alpha)
+            } else {
+                drawCritter(origin: body.origin, alpha: pose.alpha,
+                            legs: pose.legs, eyesClosed: pose.eyesClosed)
+            }
         }
 
         if let badge = remoteBadge {
-            drawRemoteBadge(badge, origin: origin, spriteWidth: spriteWidth)
+            drawRemoteBadge(badge, origin: body.origin, spriteWidth: base.width)
         }
 
         // Anchored to where the pet *rests*, not where the animation has it this
@@ -277,7 +277,32 @@ final class PetView: NSView {
         return clipped.width < 40 || clipped.height < 40 ? bounds : clipped
     }
 
-    private func drawCritter(origin: NSPoint, alpha: CGFloat, stepping: Bool) {
+    /// The rect a squashed critter actually occupies. Feet stay put; width and
+    /// height trade off so the silhouette keeps its area.
+    private func squashed(_ frame: NSRect, by squash: CGFloat) -> NSRect {
+        let width = frame.width * squash
+        let height = frame.height / squash
+        return NSRect(x: frame.midX - width / 2, y: frame.minY,
+                      width: width, height: height)
+    }
+
+    /// Scales the critter about its feet, so a squash plants it into the ground
+    /// and a stretch pulls it upward — the anchor is what sells the weight.
+    private func withSquash(_ squash: CGFloat, footedAt frame: NSRect, _ draw: () -> Void) {
+        guard abs(squash - 1) > 0.001 else { return draw() }
+
+        NSGraphicsContext.saveGraphicsState()
+        let transform = NSAffineTransform()
+        transform.translateX(by: frame.midX, yBy: frame.minY)
+        transform.scaleX(by: squash, yBy: 1 / squash)
+        transform.translateX(by: -frame.midX, yBy: -frame.minY)
+        transform.concat()
+        draw()
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private func drawCritter(origin: NSPoint, alpha: CGFloat,
+                             legs: PetSprite.Legs, eyesClosed: Bool) {
         NSGraphicsContext.saveGraphicsState()
         let shadow = NSShadow()
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
@@ -287,9 +312,8 @@ final class PetView: NSView {
 
         bodyColor.withAlphaComponent(alpha).setFill()
 
-        let legs = stepping ? PetSprite.legsStepping : PetSprite.legsPlanted
         let body = PetSprite.cells(of: PetSprite.torso)
-            + PetSprite.cells(of: legs, rowOffset: PetSprite.torso.count)
+            + PetSprite.cells(of: legs.map, rowOffset: PetSprite.torso.count)
 
         // One path for the whole body so the drop shadow wraps the silhouette
         // instead of every individual pixel.
@@ -301,7 +325,8 @@ final class PetView: NSView {
         NSGraphicsContext.restoreGraphicsState()
 
         Self.eyeInk.withAlphaComponent(alpha).setFill()
-        for pixel in PetSprite.eyes(for: mood) {
+        let expression = eyesClosed ? PetSprite.closedEyes : PetSprite.eyes(for: mood)
+        for pixel in expression {
             rect(col: pixel.col, row: pixel.row, origin: origin).fill()
         }
     }
@@ -316,9 +341,33 @@ final class PetView: NSView {
         )
     }
 
+    /// Three glyphs drifting up and off, so a sleeping pet still has a pulse.
+    /// Staggered thirds of one loop, which costs one timer instead of three.
+    private func drawSleep(_ progress: CGFloat, over sprite: NSRect) {
+        let font = NSFont.systemFont(ofSize: 11, weight: .bold)
+
+        for index in 0..<3 {
+            let local = (progress + CGFloat(index) / 3).truncatingRemainder(dividingBy: 1)
+            // Fade in over the first fifth, then out across the rest.
+            let fade = local < 0.2 ? local / 0.2 : (1 - local) / 0.8
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: font.pointSize * (0.75 + local * 0.5),
+                                         weight: .bold),
+                .foregroundColor: NSColor.white.withAlphaComponent(fade * 0.55)
+            ]
+            let glyph = "z" as NSString
+            glyph.draw(
+                at: NSPoint(
+                    x: (sprite.maxX - 12 + local * 14).rounded(),
+                    y: (sprite.maxY - 4 + local * 26).rounded()
+                ),
+                withAttributes: attributes
+            )
+        }
+    }
+
     /// Expanding ring so a blocked session catches your eye from across the room.
-    private func drawAttentionPulse(around frame: NSRect) {
-        let cycle = phase.truncatingRemainder(dividingBy: 1.5) / 1.5
+    private func drawAttentionPulse(around frame: NSRect, progress cycle: CGFloat) {
         let spread = 4 + cycle * 18
         let alpha = (1 - cycle) * 0.75
 

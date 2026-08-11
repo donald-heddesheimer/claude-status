@@ -34,12 +34,34 @@ enum PetSprite {
         ".....#......#..."
     ]
 
+    /// One foot up. Alternated slowly with `legsPlanted` it reads as an
+    /// impatient tap rather than as walking.
+    static let legsTapping: [String] = [
+        "...#.#....#.#...",
+        "...#.#....#....."
+    ]
+
+    /// Which leg map a pose wants.
+    enum Legs {
+        case planted, stepping, tapping
+
+        var map: [String] {
+            switch self {
+            case .planted:  return legsPlanted
+            case .stepping: return legsStepping
+            case .tapping:  return legsTapping
+            }
+        }
+    }
+
+    /// Lids down. The sleep expression, and every blink in the waking ones.
+    static let closedEyes: [(col: Int, row: Int)] = [(4, 3), (5, 3), (10, 3), (11, 3)]
+
     /// Eye cells as (column, row) pairs, so expression is independent of pose.
     static func eyes(for mood: PetMood) -> [(col: Int, row: Int)] {
         switch mood {
         case .asleep:
-            // Closed: flat lids.
-            return [(4, 3), (5, 3), (10, 3), (11, 3)]
+            return closedEyes
         case .busy:
             // Squinting in concentration. A literal >  < scatters into loose
             // blocks at this cell size, so the squint is a shortened bar.
