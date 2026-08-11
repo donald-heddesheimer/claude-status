@@ -5,6 +5,10 @@ import Network
 struct StateEvent {
     let sessionID: String
     let state: String
+    /// The account the session runs under. Empty from hooks older than 0.1.3.
+    /// On a shared host this is the only thing separating your sessions from
+    /// everyone else's — loopback isn't per-user, so the pet hears them all.
+    let user: String
     let host: String
     let remote: Bool
     let tool: String
@@ -154,6 +158,7 @@ final class StateServer {
         onEvent(StateEvent(
             sessionID: json["session_id"] as? String ?? "unknown",
             state: (json["state"] as? String ?? "idle").lowercased(),
+            user: json["user"] as? String ?? "",
             host: json["host"] as? String ?? "local",
             remote: json["remote"] as? Bool ?? false,
             tool: json["tool"] as? String ?? "",

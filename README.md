@@ -148,6 +148,37 @@ per-session setup.
 > the extension and a plain terminal. Remember that under Remote-SSH, Claude
 > Code runs on the *remote* host — that's where the plugin belongs.
 
+### Shared hosts
+
+Loopback is per-machine, not per-user. `RemoteForward` binds **one**
+`127.0.0.1:7777` for the whole box, and it belongs to whoever connected — so on
+a host you share with colleagues, their claude-status hooks post into *your*
+tunnel. Their file names and Bash descriptions appear on your desktop, and their
+permission prompts make your pet ask for attention you can't act on.
+
+Name the accounts that are actually yours:
+
+```bash
+echo donald > ~/.claude-status/users
+```
+
+Or `CLAUDE_STATUS_USERS=donald,donald.heddesheimer`. Your own Mac account is
+always allowed, so a filter added for a remote host never silences local work.
+Unconfigured, the pet accepts everyone — the right default on a machine only you
+use.
+
+Events carrying no account at all come from a plugin older than 0.1.3. Local
+ones are kept, since they reached the port from a process on your own Mac.
+Remote ones are dropped, since they came down a tunnel from a machine you may
+share — which is the whole point.
+
+For a stronger boundary than a self-reported name, give both ends a shared
+secret; anything without it is refused outright:
+
+```bash
+openssl rand -hex 16 | tee ~/.claude-status/token | ssh devbox 'mkdir -p ~/.claude-status && cat > ~/.claude-status/token'
+```
+
 ---
 
 ## States
@@ -241,6 +272,9 @@ cleanly either way.
 | Variable | Default | Meaning |
 |---|---|---|
 | `CLAUDE_STATUS_PORT` | `7777` | Port used by both hook and pet |
+| `CLAUDE_STATUS_USERS` | *(all)* | Accounts the pet accepts, comma separated. Also read from `~/.claude-status/users`, one per line |
+| `CLAUDE_STATUS_USER` | *(unset)* | Hook-side: stay silent unless running as this account |
+| `CLAUDE_STATUS_DEBUG` | `0` | `1` logs every event the pet receives, taken or dropped |
 | `CLAUDE_STATUS_CLICK_APP` | `/Applications/Claude.app` | What a click opens — app path or bundle id |
 | `CLAUDE_STATUS_ART` | `~/.claude-status/pet.png` | Override artwork |
 | `CLAUDE_STATUS_TOKEN_FILE` | `~/.claude-status/token` | Shared secret, if you want one |

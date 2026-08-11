@@ -34,6 +34,17 @@ curl -s -m 2 -o /dev/null -w 'HTTP %{http_code}\n' -X POST http://127.0.0.1:7777
 [ -f "$HOME/.claude-status/disabled" ] && echo "DISABLED (rm ~/.claude-status/disabled to re-enable)" || echo "enabled"
 ```
 
+5. Which account will these events be stamped with, and how old is the plugin?
+   On a shared host the pet filters on this, so a mismatch means silence.
+
+```bash
+echo "account: $(id -un)"
+echo "plugin:  ${CLAUDE_PLUGIN_ROOT:-not set}"
+grep -q '"user"' "${CLAUDE_PLUGIN_ROOT:-.}/hooks/emit.sh" 2>/dev/null \
+  && echo "stamps events with the account (0.1.3+)" \
+  || echo "does NOT stamp events — update the plugin and restart this session"
+```
+
 Interpretation:
 
 - `HTTP 200` means the pet received it. If it still didn't move, the app is

@@ -15,10 +15,34 @@ application.setActivationPolicy(.accessory)
 
 let store = SessionStore()
 let controller = PetController(store: store)
+let users = UserFilter.load()
+
+// CLAUDE_STATUS_DEBUG=1 prints every event as it lands. The pet is a glance, so
+// when it says something you don't recognise — a stray "allow Bash?" from a
+// session you can't place — this is how you find out who sent it.
+let debug = (ProcessInfo.processInfo.environment["CLAUDE_STATUS_DEBUG"] ?? "") == "1"
+
+let clock: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "HH:mm:ss"
+    return formatter
+}()
 
 let server = StateServer(port: port, token: token) { event in
     // The network runs off the main thread; all UI state changes hop back.
+    // The filter check rides along on that hop, which is also what keeps its
+    // "already reported this account" set to a single thread.
     DispatchQueue.main.async {
+        let allowed = users.accepts(event)
+        if debug {
+            let line = "[\(clock.string(from: Date()))] \(allowed ? "take" : "DROP") "
+                + "user=\(event.user.isEmpty ? "-" : event.user) "
+                + "host=\(event.host)\(event.remote ? " (ssh)" : "") "
+                + "state=\(event.state) tool=\(event.tool.isEmpty ? "-" : event.tool) "
+                + "session=\(event.sessionID.prefix(8)) cwd=\(event.cwd)\n"
+            FileHandle.standardError.write(Data(line.utf8))
+        }
+        guard allowed else { return }
         store.apply(event)
     }
 }
@@ -30,6 +54,7 @@ do {
         let banner = """
         claude-status: pet listening on 127.0.0.1:\(port)\
         \(token.map { _ in " (token required)" } ?? "")
+        \(users.describe.map { "accepting sessions from: \($0)" } ?? "accepting sessions from any account")
         Right-click the pet to quit.
 
         """

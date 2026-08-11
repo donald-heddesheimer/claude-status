@@ -46,6 +46,22 @@ sanitize() {
   printf '%s' "$1" | tr -d '"\\' | tr -d '\000-\037' | cut -c1-120
 }
 
+# Which account produced this event.
+#
+# This matters because loopback is not private on a shared host. The SSH
+# RemoteForward binds one 127.0.0.1:7777 for the *whole machine*, so every
+# account on that box running claude-status posts into whoever's tunnel is up —
+# their file names and permission prompts land on someone else's desktop. The
+# pet needs to know who each event came from to keep that from happening.
+USER_NAME="$(sanitize "${USER:-$(id -un 2>/dev/null)}")"
+
+# Optional local guard. The pet does the real filtering — it's the only end that
+# sees everyone's events — but if you set CLAUDE_STATUS_USER, this install stays
+# quiet unless it's running as that account.
+if [ -n "${CLAUDE_STATUS_USER:-}" ] && [ "$USER_NAME" != "$CLAUDE_STATUS_USER" ]; then
+  exit 0
+fi
+
 SESSION_ID="$(sanitize "$(json_str session_id)")"
 TOOL="$(sanitize "$(json_str tool_name)")"
 CWD="$(sanitize "$(json_str cwd)")"
@@ -121,7 +137,7 @@ else
   REMOTE="false"
 fi
 
-BODY="{\"state\":\"${STATE}\",\"session_id\":\"${SESSION_ID}\",\"host\":\"${HOSTNAME_SHORT}\",\"remote\":${REMOTE},\"tool\":\"${TOOL}\",\"detail\":\"${DETAIL}\",\"cwd\":\"${CWD}\",\"agent_source\":\"claude-code\"}"
+BODY="{\"state\":\"${STATE}\",\"session_id\":\"${SESSION_ID}\",\"user\":\"${USER_NAME}\",\"host\":\"${HOSTNAME_SHORT}\",\"remote\":${REMOTE},\"tool\":\"${TOOL}\",\"detail\":\"${DETAIL}\",\"cwd\":\"${CWD}\",\"agent_source\":\"claude-code\"}"
 
 TOKEN=""
 if [ -r "$TOKEN_FILE" ]; then
