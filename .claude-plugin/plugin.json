@@ -1,7 +1,7 @@
 {
   "name": "claude-status",
   "description": "Emits Claude Code lifecycle state to a floating desktop pet. Works for local sessions and for sessions running on a remote host over SSH.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": {
     "name": "donald-heddesheimer"
   },

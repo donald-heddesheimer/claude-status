@@ -9,6 +9,18 @@ let tokenPath = environment["CLAUDE_STATUS_TOKEN_FILE"]
 let token = (try? String(contentsOfFile: tokenPath, encoding: .utf8))?
     .trimmingCharacters(in: .whitespacesAndNewlines)
 
+// A shared secret other accounts can read is not a secret. Warn rather than
+// refuse to start — the pet's job is to keep working.
+if token?.isEmpty == false,
+   let permissions = (try? FileManager.default.attributesOfItem(atPath: tokenPath))?[.posixPermissions] as? NSNumber,
+   permissions.intValue & 0o077 != 0 {
+    FileHandle.standardError.write(Data("""
+    claude-status: \(tokenPath) is readable by other accounts (mode \(String(permissions.intValue, radix: 8))).
+    Fix it with: chmod 600 \(tokenPath)
+
+    """.utf8))
+}
+
 let application = NSApplication.shared
 // Accessory: no Dock icon, no menu bar, never steals focus.
 application.setActivationPolicy(.accessory)

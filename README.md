@@ -172,12 +172,21 @@ ones are kept, since they reached the port from a process on your own Mac.
 Remote ones are dropped, since they came down a tunnel from a machine you may
 share — which is the whole point.
 
-For a stronger boundary than a self-reported name, give both ends a shared
-secret; anything without it is refused outright:
+**The username is a filter, not a boundary.** It's self-reported by the hook, so
+anyone with an account on that host can post `"user":"you"` and land on your pet
+anyway. It exists to keep colleagues' work off your desktop, not to keep an
+adversary out.
+
+For an actual boundary, give both ends a shared secret. Anything without it is
+refused, and the token never appears in a command line, so it stays out of
+`ps` and `/proc` on the shared host:
 
 ```bash
-openssl rand -hex 16 | tee ~/.claude-status/token | ssh devbox 'mkdir -p ~/.claude-status && cat > ~/.claude-status/token'
+umask 077 && openssl rand -hex 16 | tee ~/.claude-status/token | ssh devbox 'mkdir -p ~/.claude-status && umask 077 && cat > ~/.claude-status/token'
 ```
+
+The `umask` matters — a token other accounts can read is not a secret, and the
+pet will warn you at startup if the file is group- or world-readable.
 
 ---
 
@@ -352,6 +361,11 @@ down, Claude Code never notices.
 Port `7777` and the `X-Petdex-Update-Token` header match
 [petdex](https://github.com/agiagentsdev/agentpets-dev), so the two are wire
 compatible. Run only one at a time, or both will drive the window.
+
+The listener requires `Content-Type: application/json` and rejects anything
+carrying an `Origin` header. Loopback is reachable from the browser, and without
+those two checks any page you visited could POST a fake session into your pet.
+A client that doesn't set a JSON content type won't be accepted.
 
 ---
 

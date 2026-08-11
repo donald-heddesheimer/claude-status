@@ -142,25 +142,38 @@ BODY="{\"state\":\"${STATE}\",\"session_id\":\"${SESSION_ID}\",\"user\":\"${USER
 TOKEN=""
 if [ -r "$TOKEN_FILE" ]; then
   TOKEN="$(head -n 1 "$TOKEN_FILE" 2>/dev/null | tr -d '\r\n')"
+  # A stray newline or quote would end the curl config line early and silently
+  # truncate the secret, so hold the token to the characters it's generated
+  # from rather than shipping a half one.
+  case "$TOKEN" in
+    *[!A-Za-z0-9_.:+/=-]*) TOKEN="" ;;
+  esac
 fi
 
 # Fire and forget, fully detached from the hook's process group. Even if the
 # far end is wedged behind a half-open SSH tunnel, the session never waits.
+#
+# The token and the body go to curl on **stdin**, never as arguments. Process
+# command lines are world-readable on a shared host — anyone with an account can
+# read /proc/<pid>/cmdline — so passing the shared secret as `-H` would publish
+# it to every user on the box, along with the file names and descriptions in the
+# body. A config file read from `-` keeps both out of the process table.
+#
+# Config values must be quoted: an unquoted one ends at the first space, which
+# silently drops "Content-Type: application/json" down to "Content-Type:" and
+# truncates any body containing a description. Quoted values honour backslash
+# escapes, so " and \ are escaped going in — sanitize() has already stripped
+# both from every field we interpolate, along with every control character, so
+# what's left is only the punctuation this script emits itself.
+ESCAPED_BODY="$(printf '%s' "$BODY" | sed 's/["\\]/\\&/g')"
+
 (
-  if [ -n "$TOKEN" ]; then
-    curl -s -o /dev/null \
-      --connect-timeout 1 --max-time 2 \
-      -X POST "http://${HOST_ADDR}:${PORT}/state" \
-      -H 'Content-Type: application/json' \
-      -H "X-Petdex-Update-Token: ${TOKEN}" \
-      --data-raw "$BODY"
-  else
-    curl -s -o /dev/null \
-      --connect-timeout 1 --max-time 2 \
-      -X POST "http://${HOST_ADDR}:${PORT}/state" \
-      -H 'Content-Type: application/json' \
-      --data-raw "$BODY"
-  fi
+  {
+    printf 'url = "http://%s:%s/state"\n' "$HOST_ADDR" "$PORT"
+    printf 'header = "Content-Type: application/json"\n'
+    [ -n "$TOKEN" ] && printf 'header = "X-Petdex-Update-Token: %s"\n' "$TOKEN"
+    printf 'data = "%s"\n' "$ESCAPED_BODY"
+  } | curl -K - -s -o /dev/null --connect-timeout 1 --max-time 2
 ) >/dev/null 2>&1 &
 
 exit 0

@@ -21,6 +21,10 @@ struct StateEvent {
 /// Minimal HTTP request parser. We only ever serve one route from loopback,
 /// so a full HTTP stack would be dead weight.
 private struct HTTPRequest {
+    /// Matches the caller's read cap. A declared length past this is malformed,
+    /// not merely large.
+    static let maxBody = 256 * 1024
+
     let headers: [String: String]
     let body: Data
 
@@ -38,7 +42,12 @@ private struct HTTPRequest {
             parsed[key] = value
         }
 
+        // `Int` happily parses a negative, and `prefix(-1)` traps. Anything out
+        // of range is treated as never-complete, so the caller's own cap closes
+        // the connection.
         let expected = Int(parsed["content-length"] ?? "0") ?? 0
+        guard expected >= 0, expected <= Self.maxBody else { return nil }
+
         let received = raw.subdata(in: split.upperBound..<raw.endIndex)
         guard received.count >= expected else { return nil }
 
@@ -145,10 +154,23 @@ final class StateServer {
     }
 
     private func handle(_ request: HTTPRequest) {
+        // Loopback is reachable from the browser. Any page the user visits can
+        // POST here — write-only, since the reply carries no CORS headers, but
+        // enough to inject a session that sits on screen for the waiting TTL.
+        //
+        // Two checks close it. An `Origin` header means a browser sent it, and
+        // nothing legitimate here has one. Requiring a JSON content type forces
+        // a CORS preflight for anything that isn't a plain form post, and the
+        // preflight is an OPTIONS we never answer.
+        guard request.headers["origin"] == nil else { return }
+        guard (request.headers["content-type"] ?? "")
+            .lowercased()
+            .hasPrefix("application/json") else { return }
+
         if let token, !token.isEmpty {
             let offered = request.headers["x-petdex-update-token"]
                 ?? request.headers["x-claude-status-token"]
-            guard offered == token else { return }
+            guard let offered, Self.constantTimeEquals(offered, token) else { return }
         }
 
         guard let json = try? JSONSerialization.jsonObject(with: request.body) as? [String: Any] else {
@@ -165,6 +187,22 @@ final class StateServer {
             detail: json["detail"] as? String ?? "",
             cwd: json["cwd"] as? String ?? ""
         ))
+    }
+
+    /// Takes time proportional to the token's length rather than to how much of
+    /// it matched. The attacker here is a local process with unlimited attempts
+    /// and no network jitter to hide the signal — the most favourable setting a
+    /// timing attack gets. Length is still observable, which is fine.
+    private static func constantTimeEquals(_ offered: String, _ expected: String) -> Bool {
+        let lhs = Array(offered.utf8)
+        let rhs = Array(expected.utf8)
+        guard lhs.count == rhs.count else { return false }
+
+        var difference: UInt8 = 0
+        for index in lhs.indices {
+            difference |= lhs[index] ^ rhs[index]
+        }
+        return difference == 0
     }
 
     private func reply(_ connection: NWConnection) {
