@@ -3,7 +3,8 @@ import AppKit
 /// Owns the panel, keeps it in sync with the session store, and remembers
 /// where you dragged it.
 final class PetController: NSObject {
-    private static let originKey = "com.claudestatus.petOrigin"
+    /// Per agent, so each pet remembers where you put *it*.
+    private var originKey: String { "com.claudestatus.petOrigin.\(agent)" }
     // The critter sits in the middle. The height is matching room above and
     // below for the thought bubble, the width is room for it to grow sideways —
     // all of it transparent and click-through.
@@ -11,20 +12,33 @@ final class PetController: NSObject {
     /// Gap between the pet and the hover panel.
     private static let statsGap: CGFloat = 10
 
-    private let store: SessionStore
+    let store: SessionStore
+    private let agent: String
+    /// Where this pet defaults to when it has no saved position, counted from
+    /// the corner so a second agent doesn't land on top of the first.
+    private let slot: Int
     private let panel: PetPanel
     private let view: PetView
     private let stats = StatsPanel()
     private var statsTimer: Timer?
     private var statsSize: NSSize = .zero
 
-    init(store: SessionStore) {
+    /// Agent name drawn under the critter. Nil when there's only one pet and
+    /// naming it would be noise.
+    var agentLabel: String? {
+        didSet { view.agentLabel = agentLabel }
+    }
+
+    init(store: SessionStore, agent: String = PetPack.primary, slot: Int = 0) {
         self.store = store
+        self.agent = agent
+        self.slot = slot
         self.panel = PetPanel(size: Self.size)
         self.view = PetView(frame: NSRect(origin: .zero, size: Self.size))
         super.init()
 
         panel.contentView = view
+        view.tint = PetPack.tint(for: agent)
         view.petImage = Self.loadArt()
         view.menuProvider = { [weak self] in self?.buildMenu() ?? NSMenu() }
         view.onClick = { Self.openClaude() }
@@ -158,8 +172,16 @@ final class PetController: NSObject {
 
     // MARK: - Position
 
+    /// Takes the panel off screen for good. Used when an agent's last session
+    /// goes away and its pet has nothing left to report.
+    func close() {
+        hideStats()
+        NotificationCenter.default.removeObserver(self)
+        panel.orderOut(nil)
+    }
+
     private func restorePosition() {
-        if let saved = UserDefaults.standard.string(forKey: Self.originKey) {
+        if let saved = UserDefaults.standard.string(forKey: originKey) {
             let origin = NSPointFromString(saved)
             // Only trust it if it still lands on a connected display.
             let visible = NSScreen.screens.contains { $0.visibleFrame.contains(origin) }
@@ -174,14 +196,16 @@ final class PetController: NSObject {
     private func moveToDefaultCorner() {
         guard let screen = NSScreen.main else { return }
         let frame = screen.visibleFrame
+        // Stack down the right edge. The window is mostly transparent, so the
+        // step is the critter's height plus a gap rather than the full frame.
         panel.setFrameOrigin(NSPoint(
             x: frame.maxX - Self.size.width - 24,
-            y: frame.maxY - Self.size.height - 24
+            y: frame.maxY - Self.size.height - 24 - CGFloat(slot) * 120
         ))
     }
 
     @objc private func windowMoved() {
-        UserDefaults.standard.set(NSStringFromPoint(panel.frame.origin), forKey: Self.originKey)
+        UserDefaults.standard.set(NSStringFromPoint(panel.frame.origin), forKey: originKey)
         // The child window already followed. The only thing that can go stale
         // is which side of the pet it belongs on, once a drag reaches a screen
         // edge — and that check costs nothing, since it re-measures nothing.
@@ -194,10 +218,28 @@ final class PetController: NSObject {
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        for line in store.summaryLines {
-            let item = NSMenuItem(title: line, action: nil, keyEquivalent: "")
+        let choices = store.choices
+        if choices.isEmpty {
+            let item = NSMenuItem(title: "No active sessions", action: nil, keyEquivalent: "")
             item.isEnabled = false
             menu.addItem(item)
+        } else {
+            // Pick a session and the pet follows that one instead of collapsing
+            // everything into a single mood.
+            let auto = NSMenuItem(title: "All sessions",
+                                  action: #selector(clearFocus), keyEquivalent: "")
+            auto.target = self
+            auto.state = store.focus == nil ? .on : .off
+            menu.addItem(auto)
+
+            for choice in choices {
+                let item = NSMenuItem(title: choice.label,
+                                      action: #selector(focusSession(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = choice.id
+                item.state = choice.isFocused ? .on : .off
+                menu.addItem(item)
+            }
         }
 
         menu.addItem(.separator())
@@ -219,6 +261,14 @@ final class PetController: NSObject {
 
     @objc private func openClaudeFromMenu() {
         Self.openClaude()
+    }
+
+    @objc private func focusSession(_ sender: NSMenuItem) {
+        store.focus = sender.representedObject as? String
+    }
+
+    @objc private func clearFocus() {
+        store.focus = nil
     }
 
     @objc private func resetPosition() {

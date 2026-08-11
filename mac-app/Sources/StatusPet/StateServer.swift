@@ -1,6 +1,10 @@
 import Foundation
 import Network
 
+extension String {
+    var nonEmpty: String? { isEmpty ? nil : self }
+}
+
 /// One lifecycle event from a Claude Code session, local or remote.
 struct StateEvent {
     let sessionID: String
@@ -16,6 +20,9 @@ struct StateEvent {
     /// pattern. Empty when the hook had nothing worth reporting.
     let detail: String
     let cwd: String
+    /// Which agent produced this — "claude-code", "codex", "opencode". Routes
+    /// the event to that agent's own pet.
+    let agentSource: String
 }
 
 /// Minimal HTTP request parser. We only ever serve one route from loopback,
@@ -185,7 +192,11 @@ final class StateServer {
             remote: json["remote"] as? Bool ?? false,
             tool: json["tool"] as? String ?? "",
             detail: json["detail"] as? String ?? "",
-            cwd: json["cwd"] as? String ?? ""
+            cwd: json["cwd"] as? String ?? "",
+            agentSource: (json["agent_source"] as? String)?
+                .trimmingCharacters(in: .whitespaces)
+                .lowercased()
+                .nonEmpty ?? "claude-code"
         ))
     }
 

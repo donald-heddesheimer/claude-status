@@ -65,7 +65,7 @@ cd claude-status/mac-app && swift run
 |---|---|
 | Click | Bring Claude to the front |
 | Drag | Move it; the position persists |
-| Right-click | Live session list, reset position, quit |
+| Right-click | Session list — pick one to pin the pet to it — reset position, quit |
 
 ### 2. The plugin — on every machine running Claude Code
 
@@ -298,6 +298,45 @@ running* (eyes shut, dimmed) means no sessions at all.
 Several sessions collapse into one mood, and **waiting outranks working** — the
 session that needs you is the one worth surfacing.
 
+### Pinning one session
+
+Collapsing is the right default: you want the pet to surface whatever is
+blocked. But with several sessions running, "what is *that* one doing" is
+otherwise only answerable from the hover panel.
+
+Right-click and pick a session, and the pet follows that one alone — its mood,
+its bubble. Pick **All sessions** to go back. A pinned session that ends releases
+the pin rather than stranding the pet on something that no longer exists.
+
+Pinned, the pet also reports `idle`, which the collapsed view stays silent about
+— you asked after that session specifically, so "nothing right now" is an answer.
+The tool name is dropped when a pinned session goes idle: it's carried forward
+from the last call so a permission prompt can say `allow Bash?`, and once the
+turn is over, still claiming `editing PetPack.swift` would be a lie about live
+work.
+
+---
+
+## Multiple agents
+
+Every event carries `agent_source`, and each agent gets **its own pet** — its own
+session list, its own saved position, its own colour. Claude Code keeps the clay
+it was drawn in; other agents get a hue derived from their name, so you learn
+which pet is which by sight. The name only appears under the critter when
+there's more than one pet, since a lone pet needs no label.
+
+Sessions from different agents were never comparable anyway. Collapsing Codex's
+"waiting" and Claude's "working" into a single mood produces a pet that is lying
+about both.
+
+The Claude Code pet is always present, so an empty desktop still tells you the
+difference between *idle* and *not installed*. Other agents' pets appear on their
+first event and leave when their last session does.
+
+> [petdex](https://github.com/agiagentsdev/agentpets-dev) reserves the same field
+> for this — *"stamp `agent_source` so the sidecar can route per-pet when we ship
+> multi-mascot"* — but doesn't route on it yet. This is that routing.
+
 Sessions that stop reporting are dropped on a timer, with the deadline
 depending on what they were doing. A *working* session going quiet means
 something broke, most likely a dropped tunnel, so it clears after 90 seconds
@@ -377,6 +416,9 @@ A client that doesn't set a JSON content type won't be accepted.
 | `hooks/emit.sh` | Reads the hook payload, posts state; dependency-free, always exits 0 |
 | `mac-app/…/StateServer.swift` | Loopback HTTP listener on `Network.framework` |
 | `mac-app/…/SessionStore.swift` | Tracks every session, collapses them to one mood |
+| `mac-app/…/PetPack.swift` | One pet per agent, routed on `agent_source` |
+| `mac-app/…/PetAnimator.swift` | Poses the critter each frame |
+| `mac-app/…/UserFilter.swift` | Keeps other accounts off your pet on a shared host |
 | `mac-app/…/PetSprite.swift` | The critter's pixel map |
 | `mac-app/…/PetWindow.swift` | Borderless floating panel and rendering |
 | `scripts/setup-remote.sh` | Generates and verifies the SSH tunnel |

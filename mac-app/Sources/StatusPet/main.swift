@@ -25,9 +25,15 @@ let application = NSApplication.shared
 // Accessory: no Dock icon, no menu bar, never steals focus.
 application.setActivationPolicy(.accessory)
 
-let store = SessionStore()
-let controller = PetController(store: store)
+let pack = PetPack()
 let users = UserFilter.load()
+
+// Sessions also disappear on a timer, not only on SessionEnd, so a pet whose
+// agent went quiet needs a nudge to notice it has nothing left to show.
+let reaper = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { _ in
+    pack.pruneEmptyPets()
+}
+RunLoop.main.add(reaper, forMode: .common)
 
 // CLAUDE_STATUS_DEBUG=1 prints every event as it lands. The pet is a glance, so
 // when it says something you don't recognise — a stray "allow Bash?" from a
@@ -48,14 +54,16 @@ let server = StateServer(port: port, token: token) { event in
         let allowed = users.accepts(event)
         if debug {
             let line = "[\(clock.string(from: Date()))] \(allowed ? "take" : "DROP") "
+                + "agent=\(event.agentSource) "
                 + "user=\(event.user.isEmpty ? "-" : event.user) "
                 + "host=\(event.host)\(event.remote ? " (ssh)" : "") "
                 + "state=\(event.state) tool=\(event.tool.isEmpty ? "-" : event.tool) "
+                + "detail=\(event.detail.isEmpty ? "-" : event.detail) "
                 + "session=\(event.sessionID.prefix(8)) cwd=\(event.cwd)\n"
             FileHandle.standardError.write(Data(line.utf8))
         }
         guard allowed else { return }
-        store.apply(event)
+        pack.apply(event)
     }
 }
 
@@ -84,5 +92,4 @@ do {
     exit(1)
 }
 
-controller.show()
 application.run()

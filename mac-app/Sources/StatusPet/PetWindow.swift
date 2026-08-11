@@ -40,6 +40,16 @@ final class PetView: NSView {
         didSet { needsDisplay = true }
     }
 
+    /// Body colour, so each agent's pet is recognisable at a glance.
+    var tint: NSColor = PetView.clay {
+        didSet { needsDisplay = true }
+    }
+
+    /// Agent name under the critter, set only when more than one pet is up.
+    var agentLabel: String? {
+        didSet { needsDisplay = true }
+    }
+
     /// Optional override artwork. Drop a PNG at ~/.claude-status/pet.png to use
     /// your own pet instead of the drawn one.
     var petImage: NSImage? {
@@ -109,15 +119,23 @@ final class PetView: NSView {
     // MARK: - Palette
 
     /// Claude clay, sampled from the mascot.
-    private static let clay = NSColor(calibratedRed: 0.843, green: 0.471, blue: 0.353, alpha: 1)
+    static let clay = NSColor(calibratedRed: 0.843, green: 0.471, blue: 0.353, alpha: 1)
     private static let eyeInk = NSColor(calibratedRed: 0.04, green: 0.04, blue: 0.05, alpha: 1)
 
     private var bodyColor: NSColor {
         switch mood {
-        case .asleep:  return NSColor(calibratedWhite: 0.44, alpha: 1)
-        case .idle:    return Self.clay
-        case .busy:    return Self.clay
-        case .waiting: return NSColor(calibratedRed: 0.93, green: 0.40, blue: 0.26, alpha: 1)
+        case .asleep:
+            return NSColor(calibratedWhite: 0.44, alpha: 1)
+        case .idle, .busy:
+            return tint
+        case .waiting:
+            // Hotter and more saturated than the resting colour, whatever that
+            // is for this agent — urgency has to read without knowing the pet.
+            guard let hot = tint.usingColorSpace(.deviceRGB) else { return tint }
+            return NSColor(deviceHue: hot.hueComponent,
+                           saturation: min(1, hot.saturationComponent * 1.35),
+                           brightness: min(1, hot.brightnessComponent * 1.05),
+                           alpha: 1)
         }
     }
 
@@ -166,6 +184,10 @@ final class PetView: NSView {
 
         if let badge = remoteBadge {
             drawRemoteBadge(badge, origin: body.origin, spriteWidth: base.width)
+        }
+
+        if let agentLabel {
+            drawAgentLabel(agentLabel, under: base)
         }
 
         // Anchored to where the pet *rests*, not where the animation has it this
@@ -338,6 +360,23 @@ final class PetView: NSView {
             y: origin.y + CGFloat(PetSprite.rows - 1 - row) * cell,
             width: cell,
             height: cell
+        )
+    }
+
+    /// Which agent this pet speaks for. Anchored to the resting frame like the
+    /// bubble, so it doesn't ride the walk cycle.
+    private func drawAgentLabel(_ text: String, under sprite: NSRect) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 9, weight: .semibold),
+            .foregroundColor: NSColor.white.withAlphaComponent(0.55),
+            .kern: 0.6
+        ]
+        let label = text.uppercased() as NSString
+        let size = label.size(withAttributes: attributes)
+        label.draw(
+            at: NSPoint(x: (sprite.midX - size.width / 2).rounded(),
+                        y: (sprite.minY - 16).rounded()),
+            withAttributes: attributes
         )
     }
 

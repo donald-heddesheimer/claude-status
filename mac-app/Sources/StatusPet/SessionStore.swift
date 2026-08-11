@@ -44,6 +44,25 @@ final class SessionStore {
     private(set) var sessions: [String: Session] = [:]
     var onChange: (() -> Void)?
 
+    /// Session the pet is pinned to, or nil for "whatever needs you most".
+    ///
+    /// Collapsing every session into one mood is the right default — you want
+    /// the pet to surface the thing that's blocked. But with several running at
+    /// once, the answer to "what is *that* one doing" is otherwise only in the
+    /// hover panel. Pinning makes the pet itself follow a single session.
+    var focus: String? {
+        didSet {
+            guard focus != oldValue else { return }
+            onChange?()
+        }
+    }
+
+    /// The pinned session, if it still exists.
+    private var focused: Session? {
+        guard let focus else { return nil }
+        return sessions[focus]
+    }
+
     /// Pet lifetime and total traffic, for the hover panel's footer.
     private let startedAt = Date()
     private(set) var eventCount = 0
@@ -83,6 +102,7 @@ final class SessionStore {
 
         if event.state == "gone" {
             sessions.removeValue(forKey: event.sessionID)
+            if focus == event.sessionID { focus = nil }
         } else {
             let now = Date()
             let previous = sessions[event.sessionID]
@@ -113,15 +133,24 @@ final class SessionStore {
         sessions = sessions.filter { _, session in
             now.timeIntervalSince(session.seen) < ttl(for: session.state)
         }
+        // Don't strand the pet on a session that no longer exists.
+        if let focus, sessions[focus] == nil { self.focus = nil }
         if sessions.count != before { onChange?() }
     }
 
     /// Waiting outranks busy: a session blocked on you is the one thing you
     /// actually need to look up for.
     var mood: PetMood {
+        if let focused { return Self.mood(of: focused.state) }
         if sessions.isEmpty { return .asleep }
         if sessions.values.contains(where: { $0.state == "waiting" }) { return .waiting }
         if sessions.values.contains(where: { Self.busyStates.contains($0.state) }) { return .busy }
+        return .idle
+    }
+
+    private static func mood(of state: String) -> PetMood {
+        if state == "waiting" { return .waiting }
+        if busyStates.contains(state) { return .busy }
         return .idle
     }
 
@@ -138,6 +167,25 @@ final class SessionStore {
     /// Short text for the thought bubble, or nil when the pet has nothing to
     /// say. Kept to a couple of words — it's a glance, not a status report.
     var caption: String? {
+        // Pinned: say what that one session is doing, even when it's idle —
+        // you asked about it specifically, so "nothing right now" is an answer.
+        //
+        // The carried-forward tool is only true while the session is working or
+        // blocked. Once it goes idle the turn is over, and still reporting
+        // "editing PetPack.swift" would be a stale claim about live work.
+        if let focused {
+            switch focused.state {
+            case "waiting":
+                return focused.tool.isEmpty ? "needs you" : "allow \(focused.tool)?"
+            case let state where Self.busyStates.contains(state):
+                return focused.tool.isEmpty
+                    ? "thinking"
+                    : Self.phrase(tool: focused.tool, detail: focused.detail)
+            default:
+                return "idle"
+            }
+        }
+
         switch mood {
         case .asleep, .idle:
             return nil
@@ -180,16 +228,37 @@ final class SessionStore {
         }
     }
 
-    /// Human-readable lines for the right-click menu.
-    var summaryLines: [String] {
-        if sessions.isEmpty { return ["No active sessions"] }
-        return sessions.values
-            .sorted { $0.seen > $1.seen }
-            .map { session in
-                let where_ = session.remote ? "\(session.host) (ssh)" : "local"
-                let detail = session.tool.isEmpty ? session.state : "\(session.state) · \(session.tool)"
-                return "\(where_) — \(detail)"
+    /// Sessions for the right-click menu, in the same order the hover panel uses
+    /// so the two never disagree about which one is first.
+    struct Choice {
+        let id: String
+        let label: String
+        let isFocused: Bool
+    }
+
+    var choices: [Choice] {
+        sorted.map { id, session in
+            let place = session.remote ? "\(session.host) (ssh)" : "local"
+            let project = Self.projectName(session.cwd)
+            let detail = session.tool.isEmpty
+                ? session.state
+                : "\(session.state) · \(Self.phrase(tool: session.tool, detail: session.detail))"
+            return Choice(
+                id: id,
+                label: project.isEmpty ? "\(place) — \(detail)" : "\(place) · \(project) — \(detail)",
+                isFocused: id == focus
+            )
+        }
+    }
+
+    /// Whatever needs you first, then most recently active.
+    private var sorted: [(key: String, value: Session)] {
+        sessions.sorted { a, b in
+            if (a.value.state == "waiting") != (b.value.state == "waiting") {
+                return a.value.state == "waiting"
             }
+            return a.value.seen > b.value.seen
+        }
     }
 
     // MARK: - Hover panel
@@ -198,12 +267,7 @@ final class SessionStore {
     var stats: StatsReport {
         let now = Date()
 
-        let rows = sessions.values
-            // Whatever needs you first, then most recently active.
-            .sorted { a, b in
-                if (a.state == "waiting") != (b.state == "waiting") { return a.state == "waiting" }
-                return a.seen > b.seen
-            }
+        let rows = sorted.map { $0.value }
             .map { session -> SessionRow in
                 var detail = session.state
                 if session.state == "waiting" {
