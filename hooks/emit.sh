@@ -50,6 +50,31 @@ SESSION_ID="$(sanitize "$(json_str session_id)")"
 TOOL="$(sanitize "$(json_str tool_name)")"
 CWD="$(sanitize "$(json_str cwd)")"
 
+# The Notification hook fires for a whole family of events, only some of which
+# mean "a human has to answer something". Notably it also fires 60s after a turn
+# ends ("Claude is waiting for your input", notification_type=idle_prompt) —
+# treating that as a permission prompt makes the pet demand attention right
+# after a chat finishes, which is exactly wrong.
+#
+# So re-classify using notification_type. Anything not on the blocked-on-you
+# list falls back to idle: a false "needs you" is far more annoying than a
+# missed one, so unknown types stay quiet.
+if [ "$STATE" = "waiting" ]; then
+  case "$(json_str notification_type)" in
+    permission_prompt|worker_permission_prompt|agent_needs_input|elicitation_dialog|elicitation_url_dialog)
+      STATE="waiting"
+      ;;
+    "")
+      # Field absent — an older Claude Code that doesn't send it. Keep the
+      # previous behaviour rather than silently going quiet.
+      STATE="waiting"
+      ;;
+    *)
+      STATE="idle"
+      ;;
+  esac
+fi
+
 # Fall back to a per-terminal identity so events still group sensibly if the
 # payload is ever missing (manual runs, older versions).
 [ -n "$SESSION_ID" ] || SESSION_ID="pid-$PPID"

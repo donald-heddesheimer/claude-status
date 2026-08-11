@@ -32,7 +32,19 @@ final class SessionStore {
     /// removes sessions cleanly either way; these are only the fallbacks.
     private let activeTTL: TimeInterval = 90
     private let idleTTL: TimeInterval = 60 * 60
+    /// A session blocked on a permission prompt is alive and will stay that way
+    /// until you walk back to it, so it must outlive `activeTTL` — otherwise the
+    /// pet stops asking for help 90s in, while the prompt is still on screen.
+    private let waitingTTL: TimeInterval = 30 * 60
     private var sweepTimer: Timer?
+
+    private func ttl(for state: String) -> TimeInterval {
+        switch state {
+        case "idle":    return idleTTL
+        case "waiting": return waitingTTL
+        default:        return activeTTL
+        }
+    }
 
     init() {
         sweepTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
@@ -59,8 +71,7 @@ final class SessionStore {
         let now = Date()
         let before = sessions.count
         sessions = sessions.filter { _, session in
-            let ttl = session.state == "idle" ? idleTTL : activeTTL
-            return now.timeIntervalSince(session.seen) < ttl
+            now.timeIntervalSince(session.seen) < ttl(for: session.state)
         }
         if sessions.count != before { onChange?() }
     }

@@ -162,6 +162,20 @@ per-session setup.
 The thought bubble reports the most recent tool in flight, so a glance tells you
 not just that Claude is busy but what it's busy doing. It stays quiet when idle.
 
+**Not every notification means "needs you".** The `Notification` hook covers a
+whole family of events, including one that fires 60s after a turn ends (*"Claude
+is waiting for your input"*). Taking that at face value makes the pet demand
+attention right after a chat finishes, so the hook re-reads `notification_type`
+and only jitters for the ones a human actually has to answer —
+`permission_prompt`, `agent_needs_input`, and the elicitation dialogs.
+Unrecognised types settle to idle, on the theory that a false alarm is worse
+than a missed one.
+
+**The jitter is deliberately late.** Claude Code holds the permission
+notification for about 6 seconds and skips it entirely if you've touched the
+session in that window, so prompts you answer immediately never reach the pet.
+That's the intended behaviour: the pet is for the prompts you walked away from.
+
 **Idle vs. nothing running.** *Idle* means a session is alive and reporting but
 not working — Claude finished its turn and is waiting for you to type. *Nothing
 running* (eyes shut, dimmed) means no sessions at all.
@@ -173,8 +187,10 @@ Sessions that stop reporting are dropped on a timer, with the deadline
 depending on what they were doing. A *working* session going quiet means
 something broke, most likely a dropped tunnel, so it clears after 90 seconds
 rather than stranding the pet mid-thought. An *idle* session going quiet is just
-you not typing, so it's held for an hour. `SessionEnd` removes sessions cleanly
-either way.
+you not typing, so it's held for an hour. A *waiting* session is held for 30
+minutes — it's blocked on a human by definition, and the pet giving up while the
+prompt is still on screen defeats the point. `SessionEnd` removes sessions
+cleanly either way.
 
 ---
 
