@@ -24,7 +24,17 @@ let server = StateServer(port: port, token: token) { event in
 }
 
 do {
-    try server.start()
+    // The banner only prints once the port is actually bound, so seeing it is
+    // proof the pet is live rather than a second copy failing quietly.
+    try server.start {
+        let banner = """
+        claude-status: pet listening on 127.0.0.1:\(port)\
+        \(token.map { _ in " (token required)" } ?? "")
+        Right-click the pet to quit.
+
+        """
+        FileHandle.standardOutput.write(Data(banner.utf8))
+    }
 } catch {
     let message = """
     claude-status: could not bind 127.0.0.1:\(port) — \(error.localizedDescription)
@@ -36,14 +46,6 @@ do {
     FileHandle.standardError.write(Data(message.utf8))
     exit(1)
 }
-
-let banner = """
-claude-status: pet listening on 127.0.0.1:\(port)\
-\(token.map { _ in " (token required)" } ?? "")
-Right-click the pet to quit.
-
-"""
-FileHandle.standardOutput.write(Data(banner.utf8))
 
 controller.show()
 application.run()

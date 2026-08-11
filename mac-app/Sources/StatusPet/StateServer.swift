@@ -56,23 +56,56 @@ final class StateServer {
         self.onEvent = onEvent
     }
 
-    func start() throws {
+    /// Starts listening. `onReady` fires once the port is genuinely bound.
+    ///
+    /// The bind happens asynchronously, so a port collision never surfaces as a
+    /// thrown error — it arrives on `stateUpdateHandler`. Without handling that,
+    /// a second pet launches, silently fails to bind, and sits there as a window
+    /// that receives nothing. So a failure here is fatal and loud.
+    func start(onReady: @escaping () -> Void) throws {
         guard let nwPort = NWEndpoint.Port(rawValue: port) else {
             throw NSError(domain: "StatusPet", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "invalid port \(port)"])
         }
 
         let params = NWParameters.tcp
-        params.allowLocalEndpointReuse = true
         // Loopback only. Never reachable from another machine directly.
         params.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: nwPort)
 
         let listener = try NWListener(using: params)
+        let port = self.port
+
+        listener.stateUpdateHandler = { state in
+            switch state {
+            case .ready:
+                onReady()
+            case .failed(let error), .waiting(let error):
+                // `.waiting` is how "address already in use" arrives: the
+                // listener would otherwise retry forever in silence.
+                Self.abort(port: port, error: error)
+            default:
+                break
+            }
+        }
+
         listener.newConnectionHandler = { [weak self] connection in
             self?.accept(connection)
         }
         listener.start(queue: .global(qos: .utility))
         self.listener = listener
+    }
+
+    private static func abort(port: UInt16, error: NWError) -> Never {
+        let message = """
+        claude-status: could not listen on 127.0.0.1:\(port) — \(error)
+
+        A pet is most likely already running. Check and clear it with:
+            pgrep -fl StatusPet
+            pkill -f StatusPet
+
+        """
+        FileHandle.standardError.write(Data(message.utf8))
+        exit(1)
     }
 
     private func accept(_ connection: NWConnection) {
