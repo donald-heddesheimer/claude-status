@@ -63,21 +63,26 @@ final class PetView: NSView {
 
     private let cell: CGFloat = 8
 
-    /// Clearance around the critter, sized so the attention pulse never clips.
-    private static let spriteMargin: CGFloat = 26
     /// Gap between the critter and its thought bubble, clear of the pulse ring.
-    private static let bubbleGap: CGFloat = 30
+    private static let bubbleGap: CGFloat = 26
 
-    /// Where the critter sits at rest, before any animation offset. Anchored to
-    /// the left of the window so the bubble has room beside it.
+    /// Where the critter sits at rest, before any animation offset. Centred, so
+    /// the window holds matching room above and below for the bubble and the
+    /// text can grow out to either side.
     private var spriteFrame: NSRect {
-        NSRect(
-            x: Self.spriteMargin,
-            y: Self.spriteMargin,
-            width: CGFloat(PetSprite.columns) * cell,
-            height: CGFloat(PetSprite.rows) * cell
+        let width = CGFloat(PetSprite.columns) * cell
+        let height = CGFloat(PetSprite.rows) * cell
+        return NSRect(
+            x: (bounds.width - width).rounded() / 2,
+            y: (bounds.height - height).rounded() / 2,
+            width: width,
+            height: height
         )
     }
+
+    /// The critter's rectangle in window coordinates. The hover panel hugs this
+    /// rather than the window, most of which is transparent padding.
+    var critterFrame: NSRect { spriteFrame }
 
     // MARK: - Animation
 
@@ -164,19 +169,19 @@ final class PetView: NSView {
         }
 
         if let caption {
-            drawThoughtBubble(caption, beside: NSRect(
+            drawThoughtBubble(caption, over: NSRect(
                 x: origin.x, y: origin.y, width: spriteWidth, height: spriteHeight
             ))
         }
     }
 
-    /// A thought bubble beside the pet naming what it's actually doing — the
-    /// tool in flight, or why it stopped.
+    /// A thought bubble naming what the pet is actually doing — the tool in
+    /// flight, or why it stopped.
     ///
-    /// Sitting alongside rather than above means the text grows into the window
-    /// instead of over the pet's head, so a phrase like "editing
-    /// SessionStore.swift" fits without shrinking to nothing.
-    private func drawThoughtBubble(_ text: String, beside sprite: NSRect) {
+    /// Overhead by default, which is where a thought belongs; it drops below the
+    /// pet only when there isn't screen room above, so a pet parked under the
+    /// menu bar doesn't think off the top of the display.
+    private func drawThoughtBubble(_ text: String, over sprite: NSRect) {
         let font = NSFont.systemFont(ofSize: 10, weight: .semibold)
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
@@ -185,11 +190,10 @@ final class PetView: NSView {
 
         let padX: CGFloat = 7
         let padY: CGFloat = 3
-        let left = sprite.maxX + Self.bubbleGap
 
         // Keep long phrases from pushing the bubble past the window edge.
         var label = text
-        let maxTextWidth = bounds.width - left - padX * 2 - 6
+        let maxTextWidth = bounds.width - padX * 2 - 12
         while (label as NSString).size(withAttributes: attributes).width > maxTextWidth,
               label.count > 4 {
             label = String(label.dropLast())
@@ -198,11 +202,18 @@ final class PetView: NSView {
 
         let textSize = (label as NSString).size(withAttributes: attributes)
         let height = textSize.height + padY * 2
+        let width = textSize.width + padX * 2
+        let above = roomAbove(for: height)
+
+        // Centred on the pet, then nudged back inside the window — a short
+        // caption sits over its head, a long one spreads out to both sides.
+        var x = sprite.midX - width / 2
+        x = min(max(x, 6), bounds.width - width - 6)
 
         let bubble = NSRect(
-            x: left,
-            y: sprite.midY - height / 2,
-            width: textSize.width + padX * 2,
+            x: x,
+            y: above ? sprite.maxY + Self.bubbleGap : sprite.minY - Self.bubbleGap - height,
+            width: width,
             height: height
         )
 
@@ -211,10 +222,14 @@ final class PetView: NSView {
 
         // Two puffs trailing back toward the pet, so it reads as a thought
         // rather than speech.
-        NSBezierPath(ovalIn: NSRect(
-            x: sprite.maxX + 9, y: sprite.midY - 2, width: 4, height: 4)).fill()
-        NSBezierPath(ovalIn: NSRect(
-            x: sprite.maxX + 17, y: sprite.midY - 3.5, width: 7, height: 7)).fill()
+        let puffs: [(y: CGFloat, size: CGFloat)] = above
+            ? [(sprite.maxY + 2, 4), (sprite.maxY + 10, 7)]
+            : [(sprite.minY - 6, 4), (sprite.minY - 17, 7)]
+        for puff in puffs {
+            NSBezierPath(ovalIn: NSRect(
+                x: sprite.midX - puff.size / 2, y: puff.y,
+                width: puff.size, height: puff.size)).fill()
+        }
 
         NSBezierPath(roundedRect: bubble, xRadius: 7, yRadius: 7).fill()
 
@@ -222,6 +237,14 @@ final class PetView: NSView {
             at: NSPoint(x: bubble.minX + padX, y: bubble.minY + padY),
             withAttributes: attributes
         )
+    }
+
+    /// Whether an overhead bubble of this height still lands on screen. The
+    /// window itself always has the room; the display is what runs out.
+    private func roomAbove(for height: CGFloat) -> Bool {
+        guard let window, let screen = window.screen else { return true }
+        let top = window.frame.minY + spriteFrame.maxY + Self.bubbleGap + height
+        return top <= screen.visibleFrame.maxY
     }
 
     private func drawCritter(origin: NSPoint, alpha: CGFloat, stepping: Bool) {

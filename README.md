@@ -166,10 +166,13 @@ field from `tool_input` that says what the call is *about* — the file for
 pattern for `Grep`, the host for `WebFetch`. The bubble reads as a phrase:
 `reading README.md`, `searching notification_type`, `Run the integration tests`.
 
-The bubble sits *beside* the pet rather than above it, so the text grows
-sideways into the window instead of squeezing itself over the pet's head. Only
-the critter takes clicks — the space held open for the bubble is click-through,
-so it never becomes an invisible target for whatever is behind it.
+The bubble sits overhead, where a thought belongs, and is held open room to
+spread sideways so a full phrase fits without shrinking to nothing. It drops
+below the pet only when there isn't screen room above — park the pet under the
+menu bar and it thinks downward instead of off the top of the display. Either
+way, only the critter takes clicks: the space reserved for the bubble is
+click-through, so it never becomes an invisible target for whatever is behind
+it.
 
 `Notification` carries no tool name, so the pet keeps the one from the preceding
 `PreToolUse`. That's what turns a vague `needs you` into `allow Bash?` — enough
@@ -210,8 +213,10 @@ Whatever needs you sorts to the top and is tinted.
 └──────────────────────────────────────────┘
 ```
 
-The panel is click-through and picks whichever side of the pet has room, so it
-works in any screen corner.
+The panel is click-through and sits *beside* the pet — bubble overhead, detail
+alongside — flipping to whichever side has room so it works in any screen
+corner. It's a child window, so it tracks the pet exactly during a drag instead
+of trailing a frame behind.
 
 **Idle vs. nothing running.** *Idle* means a session is alive and reporting but
 not working — Claude finished its turn and is waiting for you to type. *Nothing

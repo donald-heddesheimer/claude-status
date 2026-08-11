@@ -4,12 +4,10 @@ import AppKit
 /// where you dragged it.
 final class PetController: NSObject {
     private static let originKey = "com.claudestatus.petOrigin"
-    // Tall enough for the thought bubble above the pet, wide enough that the
-    // attention pulse never clips at the edges.
-    // The critter is anchored to the left of this window; the rest is room for
-    // the thought bubble to grow into beside it. Height is just the critter
-    // plus enough margin that the attention pulse never clips.
-    private static let size = NSSize(width: 400, height: 132)
+    // The critter sits in the middle. The height is matching room above and
+    // below for the thought bubble, the width is room for it to grow sideways —
+    // all of it transparent and click-through.
+    private static let size = NSSize(width: 320, height: 180)
     /// Gap between the pet and the hover panel.
     private static let statsGap: CGFloat = 10
 
@@ -135,8 +133,12 @@ final class PetController: NSObject {
 
     /// Parks the panel beside the pet, flipping to whichever side has room —
     /// the pet lives in a screen corner by default.
+    ///
+    /// Measured against the critter rather than the window: most of the window
+    /// is transparent padding for the bubble, and hugging that would leave the
+    /// panel floating in space.
     private func positionStats(_ size: NSSize) {
-        let pet = panel.frame
+        let pet = panel.convertToScreen(view.critterFrame)
         let screen = (panel.screen ?? NSScreen.main)?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
 
