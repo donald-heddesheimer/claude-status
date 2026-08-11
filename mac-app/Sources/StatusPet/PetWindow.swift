@@ -73,8 +73,8 @@ final class PetView: NSView {
         let width = CGFloat(PetSprite.columns) * cell
         let height = CGFloat(PetSprite.rows) * cell
         return NSRect(
-            x: (bounds.width - width).rounded() / 2,
-            y: (bounds.height - height).rounded() / 2,
+            x: ((bounds.width - width) / 2).rounded(),
+            y: ((bounds.height - height) / 2).rounded(),
             width: width,
             height: height
         )
@@ -168,10 +168,12 @@ final class PetView: NSView {
             drawRemoteBadge(badge, origin: origin, spriteWidth: spriteWidth)
         }
 
+        // Anchored to where the pet *rests*, not where the animation has it this
+        // frame. A bubble that bobs with the walk cycle — and vibrates along
+        // with the waiting jitter — reads as broken, and text redrawn on
+        // fractional offsets shimmers on top of it.
         if let caption {
-            drawThoughtBubble(caption, over: NSRect(
-                x: origin.x, y: origin.y, width: spriteWidth, height: spriteHeight
-            ))
+            drawThoughtBubble(caption, over: base)
         }
     }
 
@@ -191,9 +193,15 @@ final class PetView: NSView {
         let padX: CGFloat = 7
         let padY: CGFloat = 3
 
-        // Keep long phrases from pushing the bubble past the window edge.
+        // Everything is measured against the part of the window that's actually
+        // on screen. Drag the pet half off the edge and the window keeps its
+        // full width, so clamping to `bounds` would happily put the caption
+        // where no display can show it.
+        let limits = visibleBounds
+
+        // Keep long phrases from pushing the bubble past that edge.
         var label = text
-        let maxTextWidth = bounds.width - padX * 2 - 12
+        let maxTextWidth = max(60, limits.width - padX * 2 - 12)
         while (label as NSString).size(withAttributes: attributes).width > maxTextWidth,
               label.count > 4 {
             label = String(label.dropLast())
@@ -201,18 +209,23 @@ final class PetView: NSView {
         if label != text { label += "…" }
 
         let textSize = (label as NSString).size(withAttributes: attributes)
-        let height = textSize.height + padY * 2
-        let width = textSize.width + padX * 2
+        // Whole pixels: the text sits at a fixed offset inside the bubble, so a
+        // fractional origin blurs every glyph and softens the rounded corners.
+        let height = (textSize.height + padY * 2).rounded()
+        let width = (textSize.width + padX * 2).rounded()
         let above = roomAbove(for: height)
 
-        // Centred on the pet, then nudged back inside the window — a short
+        // Centred on the pet, then nudged back inside the visible area — a short
         // caption sits over its head, a long one spreads out to both sides.
-        var x = sprite.midX - width / 2
-        x = min(max(x, 6), bounds.width - width - 6)
+        var x = (sprite.midX - width / 2).rounded()
+        let lowerX = limits.minX + 6
+        let upperX = limits.maxX - width - 6
+        x = upperX >= lowerX ? min(max(x, lowerX), upperX) : lowerX
 
         let bubble = NSRect(
             x: x,
-            y: above ? sprite.maxY + Self.bubbleGap : sprite.minY - Self.bubbleGap - height,
+            y: (above ? sprite.maxY + Self.bubbleGap
+                      : sprite.minY - Self.bubbleGap - height).rounded(),
             width: width,
             height: height
         )
@@ -223,11 +236,11 @@ final class PetView: NSView {
         // Two puffs trailing back toward the pet, so it reads as a thought
         // rather than speech.
         let puffs: [(y: CGFloat, size: CGFloat)] = above
-            ? [(sprite.maxY + 2, 4), (sprite.maxY + 10, 7)]
-            : [(sprite.minY - 6, 4), (sprite.minY - 17, 7)]
+            ? [(sprite.maxY + 2, 4), (sprite.maxY + 10, 8)]
+            : [(sprite.minY - 6, 4), (sprite.minY - 18, 8)]
         for puff in puffs {
             NSBezierPath(ovalIn: NSRect(
-                x: sprite.midX - puff.size / 2, y: puff.y,
+                x: (sprite.midX - puff.size / 2).rounded(), y: puff.y,
                 width: puff.size, height: puff.size)).fill()
         }
 
@@ -242,9 +255,26 @@ final class PetView: NSView {
     /// Whether an overhead bubble of this height still lands on screen. The
     /// window itself always has the room; the display is what runs out.
     private func roomAbove(for height: CGFloat) -> Bool {
-        guard let window, let screen = window.screen else { return true }
-        let top = window.frame.minY + spriteFrame.maxY + Self.bubbleGap + height
-        return top <= screen.visibleFrame.maxY
+        guard window?.screen != nil else { return true }
+        return spriteFrame.maxY + Self.bubbleGap + height <= visibleBounds.maxY
+    }
+
+    /// The slice of this view that a display can actually show, in view
+    /// coordinates. Equal to `bounds` in the normal case, and smaller once the
+    /// pet is dragged past a screen edge.
+    private var visibleBounds: NSRect {
+        guard let window, let screen = window.screen else { return bounds }
+        let visible = screen.visibleFrame
+        let local = NSRect(
+            x: visible.minX - window.frame.minX,
+            y: visible.minY - window.frame.minY,
+            width: visible.width,
+            height: visible.height
+        )
+        let clipped = bounds.intersection(local)
+        // A pet dragged almost entirely off screen leaves nothing to lay out
+        // against; fall back to the window rather than to a degenerate rect.
+        return clipped.width < 40 || clipped.height < 40 ? bounds : clipped
     }
 
     private func drawCritter(origin: NSPoint, alpha: CGFloat, stepping: Bool) {

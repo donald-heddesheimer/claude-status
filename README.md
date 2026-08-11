@@ -197,11 +197,19 @@ field from `tool_input` that says what the call is *about* — the file for
 pattern for `Grep`, the host for `WebFetch`. The bubble reads as a phrase:
 `reading README.md`, `searching notification_type`, `Run the integration tests`.
 
-The bubble sits overhead, where a thought belongs, and is held open room to
-spread sideways so a full phrase fits without shrinking to nothing. It drops
-below the pet only when there isn't screen room above — park the pet under the
-menu bar and it thinks downward instead of off the top of the display. Either
-way, only the critter takes clicks: the space reserved for the bubble is
+The bubble sits centred overhead, where a thought belongs, and is held open room
+to spread sideways so a full phrase fits without shrinking to nothing. It is
+laid out against the part of the window a display can actually show, so it drops
+below the pet when there's no room above — park the pet under the menu bar and
+it thinks downward — and slides back inboard, truncating if it must, rather than
+running off an edge.
+
+It's anchored to where the pet *rests*, not to the walk cycle. A caption that
+bobbed along with the animation, and vibrated with the waiting jitter, read as
+broken; the pet moves and the thought holds still. Everything lands on whole
+pixels for the same reason — text redrawn on fractional offsets shimmers.
+
+Only the critter takes clicks: the space reserved for the bubble is
 click-through, so it never becomes an invisible target for whatever is behind
 it.
 
