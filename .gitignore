@@ -11,6 +11,9 @@ mac-app/.build/
 mac-app/.swiftpm/
 *.xcodeproj
 
+# Assembled app, DMG and ZIP from scripts/build-app.sh
+build/
+
 # Pet artwork is generated locally from the user's own Claude.app install so
 # the repo never redistributes Anthropic's icon.
 *.png

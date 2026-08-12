@@ -11,6 +11,14 @@ public enum StatusPetApp {
     private static var delegate: AppDelegate?
 
     public static func main() {
+        // Used by scripts/build-app.sh so the icon is generated from the same
+        // pixel map the pet is drawn from, rather than committed as a binary
+        // that quietly drifts away from it.
+        let arguments = CommandLine.arguments
+        if arguments.count >= 3, arguments[1] == "--export-icon" {
+            exit(IconExporter.writeIconSet(to: arguments[2]) ? 0 : 1)
+        }
+
         let app = NSApplication.shared
         // Accessory: no Dock icon, no menu bar, never steals focus.
         app.setActivationPolicy(.accessory)

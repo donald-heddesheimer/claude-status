@@ -73,7 +73,10 @@ final class PetView: NSView {
     private var pose = PetPose()
     private var timer: Timer?
 
-    private let cell: CGFloat = 8
+    /// Half what it was, because the sprite grid is twice as fine. The critter
+    /// occupies the same 128pt as before; only the unit it is measured in
+    /// changed.
+    private let cell: CGFloat = 4
 
     /// Gap between the critter and its thought bubble, clear of the pulse ring.
     private static let bubbleGap: CGFloat = 26
