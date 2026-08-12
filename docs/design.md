@@ -153,6 +153,14 @@ would just be the collapsed view with extra steps.
 pet quietly following one session would otherwise look exactly like a pet that
 had lost the other three.
 
+**Changing focus is not a finish.** The [finish flourish](#finishing) fires on
+the collapsed mood going busy-or-blocked → idle, and changing which session the
+pet watches moves that mood too: follow a quiet one while another is mid-run and
+the mood drops to idle having finished nothing. So the store records whether its
+last change came from a session or from you, and the flourish only reads the
+former. A pet that celebrated because you opened a menu would be lying about
+your work.
+
 ### Colour
 
 Each session gets its own bubble colour, so the caption identifies its speaker

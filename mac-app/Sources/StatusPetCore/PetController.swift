@@ -132,7 +132,13 @@ final class PetController: NSObject {
         // Deliberately not driven from SessionEnd: closing a terminal is not an
         // achievement, and a session that ends mid-task would celebrate a
         // failure.
-        let finished = (view.mood == .busy || view.mood == .waiting) && store.mood == .idle
+        //
+        // Gated on the change having come from a session rather than from you:
+        // picking a quiet session out of the menu while another is mid-run drops
+        // the mood to idle having finished nothing at all.
+        let finished = store.lastChangeWasWork
+            && (view.mood == .busy || view.mood == .waiting)
+            && store.mood == .idle
 
         view.mood = store.mood
         view.remoteBadge = store.remoteBadge

@@ -47,7 +47,7 @@ The release that makes this installable by someone who isn't me.
 - Launch at login, via `SMAppService`.
 - Optional Sparkle auto-updates, off by default and behind a build flag, so the
   default build fetches nothing.
-- Test suites: 102 Swift unit tests and 55 shell tests for `hooks/emit.sh`.
+- Test suites: 104 Swift unit tests and 55 shell tests for `hooks/emit.sh`.
 - CI on every push and pull request: Swift build and tests, app bundle assembly,
   shellcheck, the shell suite, and manifest validation.
 - Governance: `CONTRIBUTING.md`, `SECURITY.md`, `SUPPORT.md`, `ROADMAP.md`,

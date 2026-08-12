@@ -271,7 +271,7 @@ with AppKit, and the hook needs only `curl`.
 ### Developing
 
 ```bash
-swift test --package-path mac-app     # 102 unit tests
+swift test --package-path mac-app     # 104 unit tests
 bash tests/emit_test.sh               # 55 hook tests, incl. one end to end
 ./scripts/check-manifests.sh          # manifests and changelog
 ```

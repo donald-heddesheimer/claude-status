@@ -231,6 +231,38 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertTrue(choices[0].label.contains("beta"))
     }
 
+    /// The finish flourish fires on the collapsed mood going busy → idle, and
+    /// changing focus moves that mood too. Follow a quiet session while another
+    /// is mid-run and the pet would otherwise celebrate work that is still
+    /// running, because you opened a menu.
+    func testChangingFocusIsNotReportedAsWorkFinishing() {
+        let store = store()
+        store.apply(event("busy", "working", tool: "Edit"))
+        store.apply(event("quiet", "idle"))
+        XCTAssertTrue(store.lastChangeWasWork)
+
+        store.follow("quiet")
+        XCTAssertEqual(store.mood, .idle, "the mood did swing")
+        XCTAssertFalse(store.lastChangeWasWork, "but nothing finished")
+
+        store.followOne(false)
+        XCTAssertFalse(store.lastChangeWasWork)
+
+        store.colorCoding = false
+        XCTAssertFalse(store.lastChangeWasWork)
+    }
+
+    func testAnActualFinishStillCounts() {
+        let store = store()
+        store.apply(event("a", "working", tool: "Edit"))
+        store.follow("a")
+        store.apply(event("a", "idle"))
+
+        XCTAssertEqual(store.mood, .idle)
+        XCTAssertTrue(store.lastChangeWasWork,
+                      "following one session must not cost you the flourish")
+    }
+
     // MARK: - Colour
 
     /// Colour answers "which of these is talking". With one session there is no

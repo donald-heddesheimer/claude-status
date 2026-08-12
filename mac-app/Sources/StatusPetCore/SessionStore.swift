@@ -80,12 +80,23 @@ final class SessionStore {
         return sessions[focus]
     }
 
+    /// Whether the last change came from a session doing something, rather than
+    /// from you changing which session the pet watches.
+    ///
+    /// The finish flourish fires on the collapsed mood going busy-or-blocked →
+    /// idle. Changing focus moves that mood too: follow a quiet session while
+    /// another is mid-run and the mood drops to idle, having finished exactly
+    /// nothing. Celebrating there would be the pet lying about your work
+    /// because you opened a menu.
+    private(set) var lastChangeWasWork = true
+
     /// Follow one named session. Turns the mode on if it wasn't already, since
     /// naming a session is the clearest possible statement that you want one.
     func follow(_ id: String) {
         guard !followsOneSession || focus != id else { return }
         followsOneSession = true
         focus = id
+        lastChangeWasWork = false
         onChange?()
     }
 
@@ -101,6 +112,7 @@ final class SessionStore {
         followsOneSession = on
         focus = nil
         reconcileFocus()
+        lastChangeWasWork = false
         onChange?()
     }
 
@@ -126,6 +138,7 @@ final class SessionStore {
     var colorCoding = true {
         didSet {
             guard colorCoding != oldValue else { return }
+            lastChangeWasWork = false
             onChange?()
         }
     }
@@ -204,6 +217,7 @@ final class SessionStore {
 
     func apply(_ event: StateEvent) {
         eventCount += 1
+        lastChangeWasWork = true
 
         if event.state == "gone" {
             sessions.removeValue(forKey: event.sessionID)
@@ -262,6 +276,7 @@ final class SessionStore {
         // Don't strand the pet on a session that no longer exists.
         releaseSlots()
         reconcileFocus()
+        lastChangeWasWork = true
         onChange?()
     }
 
