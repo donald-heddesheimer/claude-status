@@ -18,6 +18,11 @@ public enum StatusPetApp {
         if arguments.count >= 3, arguments[1] == "--export-icon" {
             exit(IconExporter.writeIconSet(to: arguments[2]) ? 0 : 1)
         }
+        // Regenerates the README's state strip. Same reasoning as the icon:
+        // documentation art drawn by hand drifts from the pet it documents.
+        if arguments.count >= 3, arguments[1] == "--export-states" {
+            exit(StatesExporter.writeStrip(to: arguments[2]) ? 0 : 1)
+        }
 
         let app = NSApplication.shared
         // Accessory: no Dock icon, no menu bar, never steals focus.

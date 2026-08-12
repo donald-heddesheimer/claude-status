@@ -1,5 +1,9 @@
 # claude-status
 
+[![CI](https://github.com/donald-heddesheimer/claude-status/actions/workflows/ci.yml/badge.svg)](https://github.com/donald-heddesheimer/claude-status/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
+
 A floating desktop pet for macOS that reacts to Claude Code — including
 sessions running on a **remote host over SSH**.
 
@@ -8,6 +12,8 @@ is blocked waiting on you, and shuts its eyes when nothing is running. A thought
 bubble says what Claude is actually doing — `editing SessionStore.swift`, not
 `Edit`. Sessions on a remote machine carry a badge with that host's initial, so
 you can tell at a glance which box wants your attention.
+
+![The four states: nothing running, idle, working, needs you](docs/states.png)
 
 Hover for the full picture; click to bring Claude to the front.
 
@@ -44,40 +50,79 @@ address is the pet. Remotely it's an SSH reverse tunnel back to the pet.
 ## Requirements
 
 - macOS 13 or later, for the pet
-- Xcode's Swift toolchain (`swift build`)
+- Apple's command line tools, for the build — `xcode-select --install`
 - Claude Code on any machine you want to watch
 
-No runtime dependencies. The HTTP listener is `Network.framework`, the pet is
-drawn with AppKit, and the hook needs only `curl`.
+No runtime dependencies and nothing to fetch at build time. The HTTP listener is
+`Network.framework`, the pet is drawn with AppKit, and the hook needs only
+`curl`. A cold build takes about ten seconds.
 
 ---
 
 ## Install
 
-### 1. The pet — on your Mac
-
 ```bash
 git clone https://github.com/donald-heddesheimer/claude-status
-cd claude-status/mac-app && swift run
+cd claude-status && ./install.sh
 ```
+
+That builds the app, installs it to `/Applications`, registers the Claude Code
+plugin, and starts the pet. Hooks apply to **newly started** sessions, so open a
+new one and it will start reacting.
 
 | Gesture | Action |
 |---|---|
 | Click | Bring Claude to the front |
 | Drag | Move it; the position persists |
-| Right-click | Session list — pick one to pin the pet to it — reset position, quit |
+| Right-click | Settings, health, session list — pick one to pin the pet to it — reset position, quit |
 
-### 2. The plugin — on every machine running Claude Code
+Everything else — port, what a click opens, allowed accounts, the token, launch
+at login — is in **Settings**, from that right-click menu.
 
+<details>
+<summary>Why it builds instead of downloading a binary</summary>
+
+macOS quarantines anything downloaded and refuses to open apps that aren't
+notarised by a paid Apple Developer account. Release artifacts here are signed
+ad-hoc, so double-clicking a downloaded build fails — while software you compiled
+yourself is never quarantined and just works.
+
+The signing and notarisation path is written and waiting in
+[`scripts/build-app.sh`](scripts/build-app.sh); it needs an Apple Developer
+Program membership to switch on. Until then, building locally is the honest
+recommendation rather than telling you to strip a quarantine attribute. See the
+[roadmap](ROADMAP.md).
+
+</details>
+
+<details>
+<summary>Running it without installing (for development)</summary>
+
+```bash
+swift run --package-path mac-app
 ```
-/plugin marketplace add donald-heddesheimer/claude-status
-/plugin install claude-status@claude-status
+
+A foreground debug build with the startup banner visible. Note that it uses a
+different preferences domain than the installed app, so the two don't share
+settings. `./install.sh --dev` registers the plugin from your clone instead of
+from GitHub, so hook edits take effect without reinstalling.
+
+</details>
+
+### On every machine running Claude Code
+
+`install.sh` handles your Mac. For a **remote host**, install the plugin there
+too — from a shell:
+
+```bash
+claude plugin marketplace add donald-heddesheimer/claude-status
+claude plugin install claude-status@claude-status
 ```
 
-Install it on your Mac for local sessions, on the remote box for SSH sessions,
-or both. Nothing about the plugin differs between the two.
+or with `/plugin marketplace add` and `/plugin install` inside a session.
+Nothing about the plugin differs between local and remote.
 
-### 3. The tunnel — SSH only
+### The tunnel — SSH only
 
 See [Remote setup](#remote-setup-over-ssh) below.
 
@@ -91,10 +136,14 @@ tunnel connects them.
 **Step 1 — start the pet on your Mac.**
 
 ```bash
-cd claude-status/mac-app && swift run
+open -a claude-status
 ```
 
 **Step 2 — add the tunnel to `~/.ssh/config` on your Mac.**
+
+Settings → Remote will do this for you: it lists your host aliases, proposes the
+line, backs up your config before writing, and then tests the tunnel and
+explains what came back. To do it by hand:
 
 ```
 Host devbox
@@ -325,7 +374,7 @@ in, since showing it as one of Claude's would misreport both.
 
 One pet per agent is written and working, but parked: each agent got its own
 critter, session list, colour and saved position. It's commented out in
-[`PetPack.swift`](mac-app/Sources/StatusPet/PetPack.swift) behind a `TODO` with
+[`PetPack.swift`](mac-app/Sources/StatusPetCore/PetPack.swift) behind a `TODO` with
 instructions for switching it back on, waiting on a second agent actually worth
 watching.
 
@@ -346,6 +395,17 @@ cleanly either way.
 ---
 
 ## Configuration
+
+**Settings, from the pet's right-click menu**, covers everything you'd normally
+want: port, what a click opens, allowed accounts, the token file, launch at
+login, debug logging, and a **Health** tab showing whether the listener is
+bound, when the last event arrived, and why the last rejected event was
+rejected. There's also an SSH setup wizard that detects your host aliases,
+proposes a `RemoteForward` line, writes it with a backup, and tests it.
+
+The environment variables below still work and **take precedence** over
+Settings, so existing setups keep behaving as they did. Settings marks any field
+an environment variable is overriding rather than silently ignoring your input.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -369,7 +429,7 @@ touching any configuration. Delete the file to resume.
 ## Artwork
 
 The critter is drawn from a pixel map in
-[`PetSprite.swift`](mac-app/Sources/StatusPet/PetSprite.swift) — no image files,
+[`PetSprite.swift`](mac-app/Sources/StatusPetCore/PetSprite.swift) — no image files,
 nothing to install, crisp at any scale. Body, legs and eyes are separate layers,
 so it shuffles its feet and changes expression independently: squinting while it
 works, wide-eyed when it needs you, lids shut when nothing is running.
@@ -416,9 +476,38 @@ A client that doesn't set a JSON content type won't be accepted.
 | `mac-app/…/PetPack.swift` | Routes events by `agent_source`; per-agent pets parked behind a TODO |
 | `mac-app/…/PetAnimator.swift` | Poses the critter each frame |
 | `mac-app/…/UserFilter.swift` | Keeps other accounts off your pet on a shared host |
-| `mac-app/…/PetSprite.swift` | The critter's pixel map |
+| `mac-app/…/PetSprite.swift` | The critter's pixel map — and the source the app icon is rendered from |
 | `mac-app/…/PetWindow.swift` | Borderless floating panel and rendering |
+| `mac-app/…/Preferences.swift` | Settings store; environment variables win where set |
+| `mac-app/…/RemoteSetup.swift` | SSH host detection, tunnel config, live probe |
+| `install.sh` | Build, install, register the plugin, start it |
+| `scripts/build-app.sh` | Universal `.app`, optional signed and notarised DMG/ZIP |
 | `scripts/setup-remote.sh` | Generates and verifies the SSH tunnel |
+| `scripts/check-manifests.sh` | Manifest, hook-path and changelog consistency |
+
+### Tests
+
+```bash
+swift test --package-path mac-app     # 69 unit tests
+bash tests/emit_test.sh               # 55 hook tests, incl. one end to end
+./scripts/check-manifests.sh          # manifests and changelog
+```
+
+CI runs all three on every push and pull request, plus shellcheck at `style`
+severity and a full `.app` build, so the packaging path can't rot between
+releases.
+
+---
+
+## Project
+
+| | |
+|---|---|
+| [CHANGELOG.md](CHANGELOG.md) | What changed, and when |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Building, testing, and the constraints worth knowing before changing things |
+| [SECURITY.md](SECURITY.md) | Threat model, and why the username filter is not a boundary |
+| [SUPPORT.md](SUPPORT.md) | Troubleshooting and the tested-version matrix |
+| [ROADMAP.md](ROADMAP.md) | What's planned, and what's been declined |
 
 ---
 
