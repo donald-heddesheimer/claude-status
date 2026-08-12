@@ -18,6 +18,8 @@ struct PetPose {
     var pulse: CGFloat?
     /// Rising sleep glyphs, 0…1. Nil when the pet is awake.
     var sleep: CGFloat?
+    /// Celebration progress, 0…1. Nil unless a turn just finished.
+    var celebration: CGFloat?
 }
 
 /// Drives the critter's motion.
@@ -40,13 +42,31 @@ final class PetAnimator {
     /// Blinks come in pairs often enough to be worth the one extra field.
     private var pendingSecondBlink = false
 
+    /// How long the pet celebrates a finished turn.
+    ///
+    /// Long enough to catch your eye if you glance over, short enough that it is
+    /// gone before you look back — the pet is a glance, and a pet still dancing
+    /// a minute later would be reporting something it does not know.
+    static let celebrationDuration: CFTimeInterval = 2.5
+
+    private var celebrateUntil: CFTimeInterval = -.greatestFiniteMagnitude
+
+    var isCelebrating: Bool { now < celebrateUntil }
+
     /// Calm states don't need 30fps. Breathing and blinking read the same at 12,
-    /// and the pet is on screen all day.
+    /// and the pet is on screen all day. A celebration is the exception: it is
+    /// the fastest motion the pet ever makes, and it judders at 12.
     var frameInterval: TimeInterval {
+        if isCelebrating { return 1.0 / 30.0 }
         switch mood {
         case .busy, .waiting: return 1.0 / 30.0
         case .idle, .asleep:  return 1.0 / 12.0
         }
+    }
+
+    /// Claude just finished. Play a short flourish over whatever the mood is.
+    func celebrate() {
+        celebrateUntil = now + Self.celebrationDuration
     }
 
     func set(mood: PetMood) {
@@ -63,23 +83,31 @@ final class PetAnimator {
     func advance(by delta: CFTimeInterval) -> PetPose {
         now += delta
 
-        var pose = PetPose()
-        switch mood {
-        case .asleep:  pose = asleepPose()
-        case .idle:    pose = idlePose()
-        case .busy:    pose = busyPose()
-        case .waiting: pose = waitingPose()
-        }
-
-        applyEntrance(to: &pose)
-        applyBlink(to: &pose)
-
         // Ease toward the target opacity instead of switching. 0.45 → 1 in about
-        // a third of a second.
+        // a third of a second. Done before anything can return early, so a
+        // celebration cannot leave the pet stranded at a stale opacity.
         let target: CGFloat = mood == .asleep ? 0.45 : 1
         alpha += (target - alpha) * min(1, CGFloat(delta) * 9)
-        pose.alpha = alpha
 
+        var pose: PetPose
+        if isCelebrating {
+            // The flourish replaces the resting pose rather than adding to it.
+            // Layered on top of the idle breath the two beat against each other
+            // and the hops lose their shape.
+            let elapsed = Self.celebrationDuration - (celebrateUntil - now)
+            pose = celebratePose(elapsed / Self.celebrationDuration)
+        } else {
+            switch mood {
+            case .asleep:  pose = asleepPose()
+            case .idle:    pose = idlePose()
+            case .busy:    pose = busyPose()
+            case .waiting: pose = waitingPose()
+            }
+            applyEntrance(to: &pose)
+            applyBlink(to: &pose)
+        }
+
+        pose.alpha = alpha
         return pose
     }
 
@@ -136,6 +164,28 @@ final class PetAnimator {
         }
 
         pose.pulse = CGFloat(fmod(now, 1.5) / 1.5)
+        return pose
+    }
+
+    /// Claude finished. Three hops that lose height, so it reads as delight
+    /// settling rather than a loop that got cut off — and so the last frame is
+    /// already close to the idle pose it hands back to.
+    ///
+    /// Bigger than any other motion the pet makes on purpose: the whole job of
+    /// this state is to be noticed by someone who was not looking.
+    private func celebratePose(_ progress: Double) -> PetPose {
+        var pose = PetPose()
+
+        let bounce = abs(sin(progress * .pi * 3))
+        let decay = 1 - progress * 0.55
+
+        pose.offset.height = CGFloat(bounce * decay) * 7
+        // Anchored at the feet like every other bob: compressed on landing,
+        // drawn out at the top.
+        pose.squash = 1 + CGFloat((0.45 - bounce) * decay) * 0.12
+        pose.legs = bounce > 0.35 ? .stepping : .planted
+        pose.celebration = CGFloat(progress)
+
         return pose
     }
 

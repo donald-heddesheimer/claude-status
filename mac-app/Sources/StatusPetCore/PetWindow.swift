@@ -58,6 +58,13 @@ final class PetView: NSView {
 
     var menuProvider: (() -> NSMenu)?
 
+    /// Play the finished-a-turn flourish. Restarts it if one is already running.
+    func celebrate() {
+        animator.celebrate()
+        syncAnimation()
+        needsDisplay = true
+    }
+
     /// Short text for the thought bubble. Nil hides the bubble entirely.
     var caption: String? {
         didSet { needsDisplay = true }
@@ -198,8 +205,17 @@ final class PetView: NSView {
                 image.draw(in: body, from: .zero, operation: .sourceOver, fraction: pose.alpha)
             } else {
                 drawCritter(origin: body.origin, alpha: pose.alpha,
-                            legs: pose.legs, eyesClosed: pose.eyesClosed)
+                            legs: pose.legs, eyesClosed: pose.eyesClosed,
+                            delighted: pose.celebration != nil)
             }
+        }
+
+        // After the critter, not before: sparks thrown from the top of its head
+        // that the head then draws over are just an expensive way to draw
+        // nothing. They ride the bobbing body rather than the resting frame,
+        // since they are meant to look thrown by it.
+        if let celebration = pose.celebration {
+            drawCelebration(celebration, from: body)
         }
 
         if let badge = remoteBadge {
@@ -344,7 +360,8 @@ final class PetView: NSView {
     }
 
     private func drawCritter(origin: NSPoint, alpha: CGFloat,
-                             legs: PetSprite.Legs, eyesClosed: Bool) {
+                             legs: PetSprite.Legs, eyesClosed: Bool,
+                             delighted: Bool = false) {
         NSGraphicsContext.saveGraphicsState()
         let shadow = NSShadow()
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
@@ -367,7 +384,14 @@ final class PetView: NSView {
         NSGraphicsContext.restoreGraphicsState()
 
         Self.eyeInk.withAlphaComponent(alpha).setFill()
-        let expression = eyesClosed ? PetSprite.closedEyes : PetSprite.eyes(for: mood)
+        // Delight outranks the blink. A celebration interrupted by a blink reads
+        // as the pet losing its train of thought.
+        let expression: [(col: Int, row: Int)]
+        if delighted {
+            expression = PetSprite.happyEyes
+        } else {
+            expression = eyesClosed ? PetSprite.closedEyes : PetSprite.eyes(for: mood)
+        }
         for pixel in expression {
             rect(col: pixel.col, row: pixel.row, origin: origin).fill()
         }
@@ -422,6 +446,52 @@ final class PetView: NSView {
                 ),
                 withAttributes: attributes
             )
+        }
+    }
+
+    /// Sparks thrown off a finished turn.
+    ///
+    /// Drawn rather than set in text, unlike the sleep `z`: an emoji would
+    /// inherit whatever the system font feels like today, and a coloured glyph
+    /// would ignore the pet's tint. These are four small diamonds that arc out
+    /// and fade, in the body colour, so a retinted pet keeps its own confetti.
+    private func drawCelebration(_ progress: CGFloat, from sprite: NSRect) {
+        // Fade in fast, out slowly, and stop before the hops do so the last
+        // half-second is just the pet settling.
+        let life = min(1, progress / 0.75)
+        guard life < 1 else { return }
+        let fade = life < 0.15 ? life / 0.15 : (1 - life) / 0.85
+
+        // Two per side, at different angles and speeds, so it doesn't read as a
+        // mechanical burst. All angles point upward and outward, so a spark is
+        // clear of the body from its first frame.
+        let sparks: [(angle: CGFloat, speed: CGFloat, size: CGFloat)] = [
+            (angle: 0.55, speed: 40, size: 5),
+            (angle: 1.15, speed: 30, size: 3.5),
+            (angle: 1.99, speed: 37, size: 4.5),
+            (angle: 2.59, speed: 28, size: 3)
+        ]
+
+        // The crown of the head, so nothing has to travel through the critter.
+        let centre = NSPoint(x: sprite.midX, y: sprite.maxY - 2)
+
+        for spark in sparks {
+            let travel = spark.speed * life
+            let point = NSPoint(x: centre.x + cos(spark.angle) * travel,
+                                y: centre.y + sin(spark.angle) * travel)
+            let half = spark.size * (1 - life * 0.4)
+
+            // A diamond: four points around the centre. Cheaper than a star and
+            // legible at five pixels, which a star is not.
+            let diamond = NSBezierPath()
+            diamond.move(to: NSPoint(x: point.x, y: point.y + half))
+            diamond.line(to: NSPoint(x: point.x + half, y: point.y))
+            diamond.line(to: NSPoint(x: point.x, y: point.y - half))
+            diamond.line(to: NSPoint(x: point.x - half, y: point.y))
+            diamond.close()
+
+            bodyColor.withAlphaComponent(fade * 0.9).setFill()
+            diamond.fill()
         }
     }
 

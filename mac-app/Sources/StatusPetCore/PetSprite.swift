@@ -91,6 +91,17 @@ enum PetSprite {
     static let closedEyes: [(col: Int, row: Int)] =
         block(cols: 9...12, rows: 6...7) + block(cols: 19...22, rows: 6...7)
 
+    /// Delighted — an upturned arc per eye, the classic `^ ^`.
+    ///
+    /// Wider than the open eye and drawn as a curve rather than a block, because
+    /// at this size a "happy" expression has to come from shape: there is no
+    /// room for a mouth, and a merely smaller eye reads as a squint, which is
+    /// already what concentration looks like.
+    static let happyEyes: [(col: Int, row: Int)] = [
+        (8, 6), (9, 5), (10, 5), (11, 6),
+        (20, 6), (21, 5), (22, 5), (23, 6)
+    ]
+
     /// Eye cells as (column, row) pairs, so expression is independent of pose.
     static func eyes(for mood: PetMood) -> [(col: Int, row: Int)] {
         switch mood {
