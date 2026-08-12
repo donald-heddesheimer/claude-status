@@ -16,6 +16,10 @@ The release that makes this installable by someone who isn't me.
 
 ### Added
 
+- **The pet celebrates a finished turn.** When the last working session goes
+  idle it hops with a delighted `^ ^` and throws a few sparks, for two and a
+  half seconds, then settles. Reads off the collapsed mood, so a pet watching
+  four sessions celebrates once — when the work is actually done.
 - `install.sh`: clone and run one command. Builds the app, installs it to
   `/Applications`, registers the Claude Code plugin, and starts the pet.
 - `scripts/build-app.sh`: assembles a universal (arm64 + x86_64) `.app` with a

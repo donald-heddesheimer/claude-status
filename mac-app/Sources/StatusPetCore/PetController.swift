@@ -99,9 +99,22 @@ final class PetController: NSObject {
     }
 
     private func refresh() {
+        // Claude just finished: work was in flight, and now none is. Read off
+        // the collapsed mood rather than any single session, so a pet watching
+        // four sessions celebrates once, when the last of them stops — not four
+        // times, and not while three are still running.
+        //
+        // Deliberately not driven from SessionEnd: closing a terminal is not an
+        // achievement, and a session that ends mid-task would celebrate a
+        // failure.
+        let finished = (view.mood == .busy || view.mood == .waiting) && store.mood == .idle
+
         view.mood = store.mood
         view.remoteBadge = store.remoteBadge
         view.caption = store.caption
+
+        if finished { view.celebrate() }
+
         if stats.isVisible { refreshStats() }
     }
 

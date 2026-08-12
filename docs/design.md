@@ -75,6 +75,39 @@ That's intended: the pet is for the prompts you walked away from.
 preceding `PreToolUse`. That's what turns a vague `needs you` into `allow Bash?`
 — enough to decide whether it's worth getting up for.
 
+## Finishing
+
+When the last working session goes idle, the pet hops three times with a
+delighted `^ ^` and throws a few sparks, for two and a half seconds.
+
+**Why it's a flourish and not a notification.** The point of the pet is that you
+find things out by glancing, not by being interrupted. A banner for "finished"
+would compete with Claude Code's own notifications and would still be there when
+you looked back. Two and a half seconds is long enough to catch a glance and
+short enough to be gone before you return — after which the pet is just idle,
+which is the truth.
+
+**Why it reads off the collapsed mood.** Firing per session means a pet watching
+four of them celebrates four times, and celebrates the first one while three are
+still running — which claims the work is done when it isn't. Firing when the
+collapsed mood goes busy-or-waiting → idle means one flourish, at the moment
+there is genuinely nothing left in flight.
+
+**Why not `SessionEnd`.** Closing a terminal is not an achievement, and a session
+that dies mid-task would celebrate a failure.
+
+**Why the expression is an arc.** At this size a happy face has to come from
+shape — there is no room for a mouth, and a merely smaller eye reads as a squint,
+which is already what concentration looks like. So the eye becomes an upturned
+arc, four cells wide, drawn from the same map as every other expression.
+
+The sparks are drawn rather than set as text, unlike the sleeping `z` glyphs: an
+emoji would inherit whatever the system font does this year, and a coloured glyph
+would ignore the pet's tint. They're diamonds in the body colour, so a retinted
+pet keeps its own confetti. They're also drawn *after* the critter and thrown
+from the crown of its head — sparks the head then draws over are an expensive way
+to draw nothing, which is exactly what the first version did.
+
 ## Session expiry
 
 Sessions that stop reporting are dropped on a timer, and the deadline depends on
