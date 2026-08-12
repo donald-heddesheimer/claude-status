@@ -57,6 +57,18 @@ final class StatsView: NSView {
     private static let hairline = NSColor(calibratedWhite: 1, alpha: 0.13)
     private static let waitingTint = NSColor(calibratedRed: 0.98, green: 0.55, blue: 0.40, alpha: 1)
 
+    /// Chip size and the room it takes out of the text column. This panel is the
+    /// legend for the colours on the pet's bubble, so the chip has to be the
+    /// same colour as the bubble and sit where you can compare them.
+    private static let chip: CGFloat = 8
+    private static let chipGutter: CGFloat = 14
+
+    /// Zero unless something is actually colour-coded, so a single session keeps
+    /// the panel it always had.
+    private var chipInset: CGFloat {
+        report.rows.contains { $0.color != nil } ? Self.chipGutter : 0
+    }
+
     /// Measures the report and stores it. Returns the size the panel needs.
     func apply(_ report: StatsReport) -> NSSize {
         self.report = report
@@ -64,8 +76,8 @@ final class StatsView: NSView {
         var widest: CGFloat = width(report.headline, Self.headlineFont)
         widest = max(widest, width(report.footer, Self.footerFont))
         for row in report.rows {
-            widest = max(widest, width(primaryLine(row), Self.rowFont))
-            widest = max(widest, width("\(row.detail) · \(row.age)", Self.detailFont))
+            widest = max(widest, width(primaryLine(row), Self.rowFont) + chipInset)
+            widest = max(widest, width("\(row.detail) · \(row.age)", Self.detailFont) + chipInset)
         }
 
         let contentWidth = min(max(widest, minWidth), maxWidth)
@@ -112,18 +124,23 @@ final class StatsView: NSView {
         drawRule(atY: y, width: contentWidth)
         y -= 3
 
+        let inset = chipInset
+
         for row in report.rows {
             y -= lineHeight(Self.rowFont)
-            draw(primaryLine(row), at: NSPoint(x: padding, y: y),
+            if let color = row.color {
+                drawChip(color, alignedWith: y, font: Self.rowFont)
+            }
+            draw(primaryLine(row), at: NSPoint(x: padding + inset, y: y),
                  font: Self.rowFont,
                  color: row.isWaiting ? Self.waitingTint : .white,
-                 maxWidth: contentWidth)
+                 maxWidth: contentWidth - inset)
 
             y -= 2 + lineHeight(Self.detailFont)
-            draw("\(row.detail) · \(row.age)", at: NSPoint(x: padding, y: y),
+            draw("\(row.detail) · \(row.age)", at: NSPoint(x: padding + inset, y: y),
                  font: Self.detailFont,
                  color: NSColor(calibratedWhite: 1, alpha: 0.62),
-                 maxWidth: contentWidth)
+                 maxWidth: contentWidth - inset)
 
             y -= 6
             drawRule(atY: y, width: contentWidth)
@@ -137,6 +154,27 @@ final class StatsView: NSView {
              font: Self.footerFont,
              color: NSColor(calibratedWhite: 1, alpha: 0.45),
              maxWidth: contentWidth)
+    }
+
+    /// A dot in the session's colour, centred on the cap height of the line
+    /// beside it rather than on the line box — optically centred beats
+    /// arithmetically centred next to text.
+    ///
+    /// The same dot the right-click menu uses, ringed for the same reason: the
+    /// first session's colour is near-black and this panel's background is too,
+    /// so without the ring that row would look like it had no colour at all
+    /// rather than like it had the darkest one.
+    private func drawChip(_ color: NSColor, alignedWith y: CGFloat, font: NSFont) {
+        let size = Self.chip
+        let rect = NSRect(x: padding,
+                          y: (y + font.capHeight / 2 - size / 2).rounded(),
+                          width: size, height: size)
+        let dot = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
+        color.withAlphaComponent(1).setFill()
+        dot.fill()
+        NSColor(calibratedWhite: 1, alpha: 0.5).setStroke()
+        dot.lineWidth = 1
+        dot.stroke()
     }
 
     private func drawRule(atY y: CGFloat, width: CGFloat) {

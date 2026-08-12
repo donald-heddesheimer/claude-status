@@ -121,21 +121,78 @@ what they were doing:
 
 `SessionEnd` removes sessions cleanly regardless.
 
-## Pinning
+## Several sessions at once
 
-Collapsing several sessions into one mood is the right default — you want the pet
-to surface whatever is blocked. But with several running, "what is *that* one
-doing" is otherwise only answerable from the hover panel.
+Collapsing every session into one mood is the right default — you want the pet to
+surface whatever is blocked, wherever it is. It stops being right at about three
+sessions, where the bubble belongs to whichever one spoke last and there is
+nothing on screen saying which that was. There are two answers, and they are for
+different moods.
 
-Pinned, the pet also reports `idle`, which the collapsed view stays silent about:
-you asked after that session specifically, so "nothing right now" is an answer.
-The tool name is dropped when a pinned session goes idle — it's carried forward
-from the last call so a permission prompt can say `allow Bash?`, and once the
-turn is over, still claiming `editing PetPack.swift` would be a lie about live
-work.
+### Following one
 
-A pinned session that ends releases the pin rather than stranding the pet on
-something that no longer exists.
+The pet's mood, bubble, animation and finish flourish all come from one session.
+It also reports `idle`, which the collapsed view stays silent about: you asked
+after that session specifically, so "nothing right now" is an answer. The tool
+name is dropped when it goes idle — it's carried forward from the last call so a
+permission prompt can say `allow Bash?`, and once the turn is over, still
+claiming `editing PetPack.swift` would be a lie about live work.
+
+**The mode persists; the session does not.** Session ids are minted afresh every
+time Claude Code starts, so an id saved yesterday names nothing today. What is
+remembered is that you want one session, and the pet adopts whatever turns up.
+
+**A followed session that ends is replaced, not released.** The earlier version
+of this dropped back to showing everything, which meant re-arming it by hand
+every time a session ended — and a mode you have to re-arm is not a mode.
+Adoption fires only when the followed session is actually gone: a second session
+getting blocked must not drag the pet off the one you chose, or "follow one"
+would just be the collapsed view with extra steps.
+
+**The hover panel lists that session alone**, and says how many it is hiding. A
+pet quietly following one session would otherwise look exactly like a pet that
+had lost the other three.
+
+**Changing focus is not a finish.** The [finish flourish](#finishing) fires on
+the collapsed mood going busy-or-blocked → idle, and changing which session the
+pet watches moves that mood too: follow a quiet one while another is mid-run and
+the mood drops to idle having finished nothing. So the store records whether its
+last change came from a session or from you, and the flourish only reads the
+former. A pet that celebrated because you opened a menu would be lying about
+your work.
+
+### Colour
+
+Each session gets its own bubble colour, so the caption identifies its speaker
+without a word of explanation.
+
+**Keyed to arrival, not to position.** Every list here re-sorts — the hover panel
+puts whatever needs you at the top — so a colour taken from position would change
+at the precise moment a session got blocked, which is when you least want it to
+move. Slots are handed out on first sight and released when the session ends, so
+the lowest free colour is reused rather than marching through all six over an
+afternoon.
+
+**The first is black**, which is the ink the bubble has always used. Colour
+answers "which of these is talking", and with one session — the normal case —
+there is no question to answer, so nothing changes until there is a second.
+
+**Six colours, then they repeat.** That is where legibility runs out rather than
+an arbitrary cap: all six carry the bubble's white text at better than 7:1, and
+they differ in lightness as well as hue so none of them relies on hue alone. Past
+six the hover panel is the authority.
+
+The panel and the right-click menu carry the same dot beside each session. A
+coloured bubble with no legend is decoration; the legend is what makes it
+information. Both dots are ringed, because the first colour is near-black and so
+is the panel behind it — without the ring that row reads as having no colour
+rather than as having the darkest one.
+
+One consequence worth knowing: picking the speaker used to be arbitrary. Two
+sessions blocked at once both said `allow Bash?`, so it never mattered which one
+the dictionary handed back. It matters now — an unstable pick would flip the
+bubble's colour between them on every redraw — so the order is fully determined,
+tiebreak included.
 
 ## The sprite
 
@@ -150,9 +207,10 @@ thing: a body width that centres on a half-step. At 16 columns only even widths
 centre, which made the choices either side of a 12-wide body 10 (too lean) and 14
 (wider still). 11 sits where it should and costs nothing but a denominator.
 
-The app icon and the README's state strip are both rendered from this same map at
-build time (`--export-icon`, `--export-states`). Hand-drawn documentation art
-drifts from the thing it documents and nobody notices.
+The app icon and every picture in the README are rendered from this same map
+(`--export-icon`, `--export-states`, `--export-sessions`, `--export-animation`).
+Hand-drawn documentation art drifts from the thing it documents and nobody
+notices.
 
 ## Other agents
 

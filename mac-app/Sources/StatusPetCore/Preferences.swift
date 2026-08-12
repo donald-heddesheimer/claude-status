@@ -58,8 +58,11 @@ public final class Preferences {
         public static let tokenPath = Field(key: "tokenPath", environmentVariable: "CLAUDE_STATUS_TOKEN_FILE", label: "Token file")
         public static let artPath = Field(key: "artPath", environmentVariable: "CLAUDE_STATUS_ART", label: "Artwork")
         public static let debugLogging = Field(key: "debugLogging", environmentVariable: "CLAUDE_STATUS_DEBUG", label: "Log every event")
+        public static let followOneSession = Field(key: "followOneSession", environmentVariable: "CLAUDE_STATUS_FOLLOW_ONE", label: "Follow one session")
+        public static let colorCodedBubbles = Field(key: "colorCodedBubbles", environmentVariable: "CLAUDE_STATUS_BUBBLE_COLORS", label: "Colour-code bubbles")
 
-        public static let all = [port, clickTarget, allowedUsers, tokenPath, artPath, debugLogging]
+        public static let all = [port, clickTarget, allowedUsers, tokenPath, artPath, debugLogging,
+                                 followOneSession, colorCodedBubbles]
     }
 
     private let defaults: KeyValueStore
@@ -113,11 +116,38 @@ public final class Preferences {
     }
 
     public var debugLogging: Bool {
-        get {
-            if let raw = override(Keys.debugLogging) { return raw == "1" || raw == "true" }
-            return defaults.bool(forKey: Keys.debugLogging.key)
-        }
+        get { flag(Keys.debugLogging, default: false) }
         set { defaults.set(newValue, forKey: Keys.debugLogging.key) }
+    }
+
+    /// Whether the pet follows a single session rather than collapsing all of
+    /// them into one mood.
+    ///
+    /// The *mode* is what persists, not which session — session ids are minted
+    /// afresh every time Claude Code starts, so an id saved yesterday names
+    /// nothing today. The pet adopts whatever turns up.
+    public var followOneSession: Bool {
+        get { flag(Keys.followOneSession, default: false) }
+        set { defaults.set(newValue, forKey: Keys.followOneSession.key) }
+    }
+
+    /// Whether each session gets its own thought-bubble colour. On by default:
+    /// with one session it changes nothing, and with several it is the only
+    /// thing saying which one is talking.
+    public var colorCodedBubbles: Bool {
+        get { flag(Keys.colorCodedBubbles, default: true) }
+        set { defaults.set(newValue, forKey: Keys.colorCodedBubbles.key) }
+    }
+
+    /// A boolean with a default that may be true.
+    ///
+    /// `UserDefaults.bool(forKey:)` cannot express that — an unset key and a key
+    /// set to false both come back false — so an unset key is read through
+    /// `object(forKey:)` and only then falls back.
+    private func flag(_ field: Field, default fallback: Bool) -> Bool {
+        if let raw = override(field) { return raw == "1" || raw == "true" }
+        guard defaults.object(forKey: field.key) != nil else { return fallback }
+        return defaults.bool(forKey: field.key)
     }
 
     /// Accounts whose events the pet will show. Empty means "everyone", which is

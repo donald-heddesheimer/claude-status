@@ -16,6 +16,17 @@ The release that makes this installable by someone who isn't me.
 
 ### Added
 
+- **Single-session mode.** The pet follows one session — mood, bubble, animation
+  and finish flourish all from that one — instead of collapsing everything into a
+  single mood. Right-click the pet or use Settings ▸ Sessions. The mode is what
+  persists, not the session id: those are new every launch, so the pet adopts
+  whatever turns up, and adopts a replacement rather than going blank when the
+  session it was following ends.
+- **Colour-coded thought bubbles.** With more than one session running, each gets
+  its own bubble colour, handed out on arrival and held for the life of the
+  session. The first is always black — the ink the bubble has always used — so a
+  lone session looks exactly as it did. Matching dots in the hover panel and the
+  right-click menu say which is which.
 - **The pet celebrates a finished turn.** When the last working session goes
   idle it hops with a delighted `^ ^` and throws a few sparks, for two and a
   half seconds, then settles. Reads off the collapsed mood, so a pet watching
@@ -36,7 +47,7 @@ The release that makes this installable by someone who isn't me.
 - Launch at login, via `SMAppService`.
 - Optional Sparkle auto-updates, off by default and behind a build flag, so the
   default build fetches nothing.
-- Test suites: 69 Swift unit tests and 55 shell tests for `hooks/emit.sh`.
+- Test suites: 104 Swift unit tests and 55 shell tests for `hooks/emit.sh`.
 - CI on every push and pull request: Swift build and tests, app bundle assembly,
   shellcheck, the shell suite, and manifest validation.
 - Governance: `CONTRIBUTING.md`, `SECURITY.md`, `SUPPORT.md`, `ROADMAP.md`,
@@ -58,6 +69,9 @@ The release that makes this installable by someone who isn't me.
   committed as a binary, so it cannot drift from the critter on screen.
 - A port collision no longer quits the app. It stays up, reports the problem in
   Health, and Settings can move it to a free port without a relaunch.
+- Settings distinguishes changes that need the listener restarted from changes
+  that only affect how the pet looks. Toggling a colour no longer drops the
+  socket out from under a hook that happens to be posting.
 
 ### Fixed
 

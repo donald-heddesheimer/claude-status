@@ -11,11 +11,12 @@ import AppKit
 /// tabs of labelled controls is less code than the plumbing to load one.
 public final class SettingsWindowController: NSWindowController {
     public enum Tab: Int, CaseIterable {
-        case general, security, remote, health
+        case general, sessions, security, remote, health
 
         var title: String {
             switch self {
             case .general:  return "General"
+            case .sessions: return "Sessions"
             case .security: return "Security"
             case .remote:   return "Remote"
             case .health:   return "Health"
@@ -23,17 +24,40 @@ public final class SettingsWindowController: NSWindowController {
         }
     }
 
+    /// What a change actually costs to apply.
+    ///
+    /// The two used to be one bucket, which meant every setting restarted the
+    /// listener. That is right for the port and wrong for a colour checkbox:
+    /// dropping the socket, however briefly, is a real thing to do to a hook
+    /// that might be posting at that instant.
+    public enum Change {
+        /// Port, token, accounts, logging — the listener has to come back up.
+        case wire
+        /// How the pet looks. Nothing on the network needs to know.
+        case display
+    }
+
     private let preferences: Preferences
     private let health: Health
-    private let onChange: () -> Void
+    private let onChange: (Change) -> Void
+
+    /// The live session list, supplied by the app after construction — the tab
+    /// is built once and the sessions change constantly, so it is read on every
+    /// `show` rather than captured at init.
+    var choices: (() -> [SessionChoice])?
+    var onFollow: ((String?) -> Void)?
 
     private let tabs = NSTabView()
     private var healthStack: NSStackView?
     private var remoteStatus: NSTextField?
     private var hostPicker: NSPopUpButton?
     private var tokenField: NSTextField?
+    /// Internal rather than private so the tests can read back what the picker
+    /// was rebuilt into. Nothing else touches them.
+    private(set) var sessionPicker: NSPopUpButton?
+    private var followToggle: NSButton?
 
-    public init(preferences: Preferences, health: Health, onChange: @escaping () -> Void) {
+    public init(preferences: Preferences, health: Health, onChange: @escaping (Change) -> Void) {
         self.preferences = preferences
         self.health = health
         self.onChange = onChange
@@ -69,6 +93,7 @@ public final class SettingsWindowController: NSWindowController {
     public func show(tab: Tab) {
         tabs.selectTabViewItem(at: tab.rawValue)
         refreshHealth()
+        refreshSessions()
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
     }
@@ -137,13 +162,36 @@ public final class SettingsWindowController: NSWindowController {
     @objc private func fieldCommitted(_ sender: NSTextField) {
         guard let key = sender.identifier?.rawValue, let handler = editHandlers[key] else { return }
         handler(sender.stringValue)
-        onChange()
+        onChange(.wire)
     }
 
     private func checkbox(_ title: String, on: Bool, action: Selector) -> NSButton {
         let button = NSButton(checkboxWithTitle: title, target: self, action: action)
         button.state = on ? .on : .off
         return button
+    }
+
+    /// A checkbox that admits when an environment variable is deciding for it.
+    ///
+    /// Same reasoning as `row`: a control that silently does nothing is worse
+    /// than no control. Returns the button too, so callers that need to read it
+    /// back later can hold on to it.
+    private func checkbox(_ field: Preferences.Field, title: String, on: Bool,
+                          action: Selector) -> (view: NSView, button: NSButton) {
+        let button = checkbox(title, on: on, action: action)
+        guard let override = preferences.override(field) else { return (button, button) }
+
+        button.state = (override == "1" || override == "true") ? .on : .off
+        button.isEnabled = false
+        let column = NSStackView(views: [
+            button,
+            label("Set by \(field.environmentVariable) in the environment, which wins over this "
+                + "window. Unset it and relaunch to change it here.", secondary: true)
+        ])
+        column.orientation = .vertical
+        column.alignment = .leading
+        column.spacing = 2
+        return (column, button)
     }
 
     private func button(_ title: String, _ action: Selector) -> NSButton {
@@ -163,6 +211,7 @@ public final class SettingsWindowController: NSWindowController {
     private func view(for tab: Tab) -> NSView {
         switch tab {
         case .general:  return generalPage()
+        case .sessions: return sessionsPage()
         case .security: return securityPage()
         case .remote:   return remotePage()
         case .health:   return healthPage()
@@ -191,8 +240,8 @@ public final class SettingsWindowController: NSWindowController {
             label("A PNG here replaces the drawn sprite and still inherits the motion.",
                   secondary: true),
             separator(),
-            checkbox("Log every event to stderr", on: preferences.debugLogging,
-                     action: #selector(toggleDebug(_:)))
+            checkbox(Preferences.Keys.debugLogging, title: "Log every event to stderr",
+                     on: preferences.debugLogging, action: #selector(toggleDebug(_:))).view
         ]
 
         let launch = checkbox("Launch at login", on: preferences.launchAtLogin,
@@ -206,6 +255,67 @@ public final class SettingsWindowController: NSWindowController {
         }
 
         return page(views)
+    }
+
+    /// Everything about which sessions the pet shows, and how you tell them
+    /// apart once it is showing several.
+    private func sessionsPage() -> NSView {
+        let follow = checkbox(Preferences.Keys.followOneSession,
+                              title: "Follow one session at a time",
+                              on: preferences.followOneSession,
+                              action: #selector(toggleFollowOne(_:)))
+        followToggle = follow.button
+
+        let picker = NSPopUpButton()
+        picker.translatesAutoresizingMaskIntoConstraints = false
+        picker.widthAnchor.constraint(equalToConstant: 340).isActive = true
+        picker.target = self
+        picker.action = #selector(sessionPicked(_:))
+        sessionPicker = picker
+
+        return page([
+            label("Which session the pet watches", bold: true),
+            label("By default every session collapses into one mood, and whatever needs you wins. "
+                + "That is the right answer when you want to know if anything is blocked, and the "
+                + "wrong one when four sessions are running and the thought bubble belongs to "
+                + "whichever spoke last.", secondary: true),
+            follow.view,
+            label("The pet's mood, bubble, animation and finish flourish all come from the one "
+                + "session. If it ends, the pet adopts another rather than going blank.",
+                  secondary: true),
+            picker,
+            label("Session ids change every time Claude Code starts, so the mode is what is "
+                + "remembered, not the session. Right-click the pet to switch without opening "
+                + "this window.", secondary: true),
+            separator(),
+            label("Telling sessions apart", bold: true),
+            checkbox(Preferences.Keys.colorCodedBubbles,
+                     title: "Colour-code thought bubbles by session",
+                     on: preferences.colorCodedBubbles,
+                     action: #selector(toggleBubbleColors(_:))).view,
+            label("Colours are handed out in the order sessions appear and stay put for as long as "
+                + "the session lasts. The first is always black, so nothing changes until there is "
+                + "a second session to tell it from. The same colours mark the hover panel and the "
+                + "right-click menu, which is where you learn what each one means.", secondary: true),
+            paletteLegend()
+        ])
+    }
+
+    /// The palette itself, drawn from the same source the pet draws from, so it
+    /// cannot describe colours the pet does not use.
+    private func paletteLegend() -> NSView {
+        let swatches = SessionPalette.colors.map { color -> NSView in
+            let image = NSImageView(image: SessionPalette.swatch(color, diameter: 14))
+            image.translatesAutoresizingMaskIntoConstraints = false
+            image.widthAnchor.constraint(equalToConstant: 14).isActive = true
+            image.heightAnchor.constraint(equalToConstant: 14).isActive = true
+            return image
+        }
+        let row = NSStackView(views: swatches + [label("1st … 6th session", secondary: true)])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 6
+        return row
     }
 
     private func securityPage() -> NSView {
@@ -302,7 +412,57 @@ public final class SettingsWindowController: NSWindowController {
 
     @objc private func toggleDebug(_ sender: NSButton) {
         preferences.debugLogging = sender.state == .on
-        onChange()
+        onChange(.wire)
+    }
+
+    @objc private func toggleFollowOne(_ sender: NSButton) {
+        preferences.followOneSession = sender.state == .on
+        onChange(.display)
+        refreshSessions()
+    }
+
+    @objc private func toggleBubbleColors(_ sender: NSButton) {
+        preferences.colorCodedBubbles = sender.state == .on
+        onChange(.display)
+        refreshSessions()
+    }
+
+    @objc private func sessionPicked(_ sender: NSPopUpButton) {
+        // A nil represented object is the "All sessions" row, which is also the
+        // way out of single-session mode from here.
+        let id = sender.selectedItem?.representedObject as? String
+        onFollow?(id)
+        followToggle?.state = id == nil ? .off : .on
+        refreshSessions()
+    }
+
+    /// Rebuilds the session picker from whatever is running right now.
+    ///
+    /// Called on every `show` as well as after each change: the window is built
+    /// once and kept, and sessions come and go while it sits closed.
+    func refreshSessions() {
+        guard let picker = sessionPicker else { return }
+        let choices = self.choices?() ?? []
+        let following = preferences.followOneSession
+
+        picker.removeAllItems()
+        picker.isEnabled = following && !choices.isEmpty
+
+        guard !choices.isEmpty else {
+            picker.addItem(withTitle: "No active sessions")
+            return
+        }
+
+        picker.addItem(withTitle: "All sessions")
+        for choice in choices {
+            picker.addItem(withTitle: choice.label)
+            picker.lastItem?.representedObject = choice.id
+            if let color = choice.color {
+                picker.lastItem?.image = SessionPalette.swatch(color)
+            }
+            if choice.isFollowed { picker.select(picker.lastItem) }
+        }
+        if !following { picker.selectItem(at: 0) }
     }
 
     @objc private func toggleLaunchAtLogin(_ sender: NSButton) {
@@ -319,7 +479,7 @@ public final class SettingsWindowController: NSWindowController {
         do {
             try TokenStore.write(token, to: preferences.tokenPath)
             tokenField?.stringValue = token
-            onChange()
+            onChange(.wire)
             present("""
             A new token is in place on this Mac. Every machine that reports in needs the same \
             value — use “Install token on host” on the Remote tab for SSH hosts.
@@ -332,7 +492,7 @@ public final class SettingsWindowController: NSWindowController {
     @objc private func removeToken() {
         try? FileManager.default.removeItem(atPath: preferences.tokenPath)
         tokenField?.stringValue = ""
-        onChange()
+        onChange(.wire)
     }
 
     @objc private func revealToken() {

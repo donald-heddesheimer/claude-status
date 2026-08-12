@@ -22,6 +22,17 @@ final class PetPack {
         claude.show()
     }
 
+    /// The sessions the Settings window offers, and how it picks one. Routed
+    /// through here rather than handing Settings the store, so the day the
+    /// per-agent block below comes back there is one place to decide which
+    /// pet's sessions the window is talking about.
+    var choices: [SessionChoice] { claude.store.choices }
+
+    func follow(_ id: String?) { claude.follow(id) }
+
+    /// Re-reads the display preferences after Settings changes one.
+    func applyPreferences() { claude.applyPreferences() }
+
     func apply(_ event: StateEvent) {
         // Events from other agents are dropped rather than folded in — a Codex
         // session showing up as one of Claude's would misreport both.

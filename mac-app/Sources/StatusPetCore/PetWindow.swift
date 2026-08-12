@@ -70,6 +70,13 @@ final class PetView: NSView {
         didSet { needsDisplay = true }
     }
 
+    /// Fill for the thought bubble, identifying which session is talking. The
+    /// default ink is what a lone session gets, so nothing changes until there
+    /// is more than one.
+    var bubbleTint: NSColor = SessionPalette.ink {
+        didSet { needsDisplay = true }
+    }
+
     /// Fired on a click that wasn't a drag.
     var onClick: (() -> Void)?
 
@@ -288,8 +295,7 @@ final class PetView: NSView {
             height: height
         )
 
-        let ink = NSColor(calibratedRed: 0.11, green: 0.12, blue: 0.15, alpha: 0.94)
-        ink.setFill()
+        bubbleTint.setFill()
 
         // Two puffs trailing back toward the pet, so it reads as a thought
         // rather than speech.

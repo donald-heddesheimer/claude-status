@@ -59,7 +59,32 @@ final class PetController: NSObject {
         )
 
         restorePosition()
+        applyPreferences()
         refresh()
+    }
+
+    /// Pushes the display preferences into the store. Called once at startup and
+    /// again whenever Settings changes one.
+    ///
+    /// The store deliberately knows nothing about `Preferences` — it is the one
+    /// piece of this app with real logic worth testing, and a singleton reaching
+    /// into `UserDefaults` from inside it would drag the disk into every test.
+    func applyPreferences() {
+        let preferences = Preferences.shared
+        store.colorCoding = preferences.colorCodedBubbles
+        store.followOne(preferences.followOneSession)
+    }
+
+    /// Follow one named session, or nil to go back to all of them. Writes the
+    /// preference too, so the choice you make from the menu is the one Settings
+    /// shows and the one you get back after a relaunch.
+    func follow(_ id: String?) {
+        Preferences.shared.followOneSession = id != nil
+        if let id {
+            store.follow(id)
+        } else {
+            store.followOne(false)
+        }
     }
 
     func show() {
@@ -107,11 +132,22 @@ final class PetController: NSObject {
         // Deliberately not driven from SessionEnd: closing a terminal is not an
         // achievement, and a session that ends mid-task would celebrate a
         // failure.
-        let finished = (view.mood == .busy || view.mood == .waiting) && store.mood == .idle
+        //
+        // Gated on the change having come from a session rather than from you:
+        // picking a quiet session out of the menu while another is mid-run drops
+        // the mood to idle having finished nothing at all.
+        let finished = store.lastChangeWasWork
+            && (view.mood == .busy || view.mood == .waiting)
+            && store.mood == .idle
 
         view.mood = store.mood
         view.remoteBadge = store.remoteBadge
-        view.caption = store.caption
+
+        // Text and colour come from one lookup: the colour is only meaningful
+        // attached to the words it arrived with.
+        let thought = store.thought
+        view.caption = thought?.text
+        view.bubbleTint = thought.flatMap { store.color(for: $0.sessionID) } ?? SessionPalette.ink
 
         if finished { view.celebrate() }
 
@@ -240,11 +276,14 @@ final class PetController: NSObject {
             menu.addItem(item)
         } else {
             // Pick a session and the pet follows that one instead of collapsing
-            // everything into a single mood.
+            // everything into a single mood. This and the Settings checkbox are
+            // the same switch — picking a session here is the fastest way to
+            // turn single-session mode on, because it answers "which one" in the
+            // same gesture.
             let auto = NSMenuItem(title: "All sessions",
                                   action: #selector(clearFocus), keyEquivalent: "")
             auto.target = self
-            auto.state = store.focus == nil ? .on : .off
+            auto.state = store.followsOneSession ? .off : .on
             menu.addItem(auto)
 
             for choice in choices {
@@ -252,7 +291,13 @@ final class PetController: NSObject {
                                       action: #selector(focusSession(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = choice.id
-                item.state = choice.isFocused ? .on : .off
+                item.state = choice.isFollowed ? .on : .off
+                // The swatch is what makes the colour on the bubble mean
+                // something — this menu and the hover panel are where you learn
+                // the mapping.
+                if let color = choice.color {
+                    item.image = SessionPalette.swatch(color)
+                }
                 menu.addItem(item)
             }
         }
@@ -286,11 +331,11 @@ final class PetController: NSObject {
     }
 
     @objc private func focusSession(_ sender: NSMenuItem) {
-        store.focus = sender.representedObject as? String
+        follow(sender.representedObject as? String)
     }
 
     @objc private func clearFocus() {
-        store.focus = nil
+        follow(nil)
     }
 
     @objc private func resetPosition() {

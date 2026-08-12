@@ -85,6 +85,42 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(preferences.allowedUsers, ["donald", "ci"])
     }
 
+    // MARK: - Flags
+    //
+    // `UserDefaults.bool(forKey:)` reads an unset key and a key set to false
+    // identically, so a flag that defaults to true has to go through
+    // `object(forKey:)` first. Getting that wrong turns colour coding off for
+    // everyone who has never opened Settings.
+
+    func testColourCodingIsOnUntilYouTurnItOff() {
+        let (preferences, _) = scratch()
+        XCTAssertTrue(preferences.colorCodedBubbles, "unset means on")
+
+        preferences.colorCodedBubbles = false
+        XCTAssertFalse(preferences.colorCodedBubbles, "and off has to survive being stored")
+
+        preferences.colorCodedBubbles = true
+        XCTAssertTrue(preferences.colorCodedBubbles)
+    }
+
+    func testFollowingOneSessionIsOffUntilYouAskForIt() {
+        let (preferences, _) = scratch()
+        XCTAssertFalse(preferences.followOneSession)
+
+        preferences.followOneSession = true
+        XCTAssertTrue(preferences.followOneSession)
+    }
+
+    func testTheEnvironmentCanForceEitherFlag() {
+        let (preferences, defaults) = scratch(["CLAUDE_STATUS_BUBBLE_COLORS": "0",
+                                               "CLAUDE_STATUS_FOLLOW_ONE": "1"])
+        defaults.set(true, forKey: "colorCodedBubbles")
+        defaults.set(false, forKey: "followOneSession")
+
+        XCTAssertFalse(preferences.colorCodedBubbles)
+        XCTAssertTrue(preferences.followOneSession)
+    }
+
     // MARK: - Migration
 
     func testMigratesTheLegacyUsersFileOnce() throws {
