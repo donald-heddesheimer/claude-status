@@ -119,6 +119,23 @@ final class PetView: NSView {
 
     deinit { timer?.invalidate() }
 
+    /// Advances the animation one frame and draws it into `rep`, with no window
+    /// and no run loop.
+    ///
+    /// This is how `--export-animation` builds the README's GIF: the real
+    /// animator driving the real drawing code, rather than a mock-up that would
+    /// start lying the first time either changed. The scheduled timer never
+    /// fires here because nothing is running the main run loop, so the clock
+    /// advances only by the amount asked for — which is also what makes the
+    /// output reproducible.
+    func drawHeadlessFrame(advancingBy delta: CFTimeInterval, into rep: NSBitmapImageRep) {
+        pose = animator.advance(by: delta)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        draw(bounds)
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
     // MARK: - Palette
 
     /// Claude clay, sampled from the mascot.

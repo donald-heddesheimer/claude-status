@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
 
-![The four states: nothing running, idle, working, needs you](docs/states.png)
+<img src="docs/pet.gif" alt="The pet working, then blocked on a permission prompt, then idle again" width="440">
 
 </div>
 
@@ -90,6 +90,8 @@ Uninstall with `rm -rf /Applications/claude-status.app`.
 | **Right-click** | Settings, health, session list, reset position, quit |
 
 ### What the pet is telling you
+
+![The four states: nothing running, idle, working, needs you](docs/states.png)
 
 | Claude is… | The pet | Bubble |
 |---|---|---|

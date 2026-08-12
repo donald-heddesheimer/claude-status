@@ -23,6 +23,9 @@ public enum StatusPetApp {
         if arguments.count >= 3, arguments[1] == "--export-states" {
             exit(StatesExporter.writeStrip(to: arguments[2]) ? 0 : 1)
         }
+        if arguments.count >= 3, arguments[1] == "--export-animation" {
+            exit(AnimationExporter.writeGIF(to: arguments[2]) ? 0 : 1)
+        }
 
         let app = NSApplication.shared
         // Accessory: no Dock icon, no menu bar, never steals focus.
