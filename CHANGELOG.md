@@ -37,6 +37,8 @@ The release that makes this installable by someone who isn't me.
   shellcheck, the shell suite, and manifest validation.
 - Governance: `CONTRIBUTING.md`, `SECURITY.md`, `SUPPORT.md`, `ROADMAP.md`,
   issue and pull request templates.
+- `docs/design.md`, holding the reasoning behind the pet's motion, thought
+  bubble, notification classification and session expiry.
 
 ### Changed
 

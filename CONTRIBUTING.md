@@ -48,6 +48,11 @@ saying *why* when a finding is genuinely wrong.
 
 ## Things worth knowing before you change something
 
+[docs/design.md](docs/design.md) covers why the pet moves and reads the way it
+does — motion, the thought bubble, notification classification, session expiry.
+Worth skimming before changing any of that. The constraints below are the ones
+that will bite you regardless of what you're working on.
+
 **The hook must never be able to hurt a session.** `hooks/emit.sh` always exits
 0, detaches `curl` from its process group, and caps the connect timeout at one
 second. If the pet is down, your laptop is asleep, or the tunnel dropped, Claude

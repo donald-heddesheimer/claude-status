@@ -18,7 +18,7 @@
 session, and keep the jq, python and fallback parsers in agreement?
 
 **The listener or the wire format** — is it still `POST /state`, JSON only, no
-`Origin`? Does the [threat model](../blob/main/SECURITY.md) still describe what
+`Origin`? Does the [threat model](https://github.com/donald-heddesheimer/claude-status/blob/main/SECURITY.md) still describe what
 the code actually does?
 
 **`PetSprite.swift`** — the app icon renders from the same map, so it changed
