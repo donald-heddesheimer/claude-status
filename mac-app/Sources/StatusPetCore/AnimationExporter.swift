@@ -28,6 +28,8 @@ public enum AnimationExporter {
         let caption: String?
         let badge: String?
         let seconds: Double
+        /// Fire the finished-a-turn flourish as this beat starts.
+        var celebrate: Bool = false
     }
 
     /// A plausible minute of work, compressed. Ends where it started so the loop
@@ -38,7 +40,7 @@ public enum AnimationExporter {
         Beat(mood: .busy, caption: "editing PetWindow.swift", badge: nil, seconds: 1.8),
         Beat(mood: .waiting, caption: "allow Bash?", badge: "D", seconds: 2.6),
         Beat(mood: .busy, caption: "Run the test suite", badge: "D", seconds: 1.8),
-        Beat(mood: .idle, caption: nil, badge: nil, seconds: 1.4)
+        Beat(mood: .idle, caption: nil, badge: nil, seconds: 3.2, celebrate: true)
     ]
 
     public static func writeGIF(to path: String) -> Bool {
@@ -73,6 +75,7 @@ public enum AnimationExporter {
             view.mood = beat.mood
             view.caption = beat.caption
             view.remoteBadge = beat.badge
+            if beat.celebrate { view.celebrate() }
 
             for _ in 0..<Int((beat.seconds * fps).rounded()) {
                 guard let rep = NSBitmapImageRep(

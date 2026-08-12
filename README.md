@@ -97,8 +97,13 @@ Uninstall with `rm -rf /Applications/claude-status.app`.
 |---|---|---|
 | thinking or working | bobs, legs shuffling, eyes squinting | `editing PetView.swift` |
 | **blocked on you** | jitters and hops inside a pulsing ring | `allow Bash?` |
-| finished its turn | settles, breathes, blinks | — |
+| **just finished** | hops with a delighted `^ ^` and throws a few sparks, for 2½ seconds | — |
+| idle | settles, breathes, blinks | — |
 | not running at all | eyes shut, dimmed | — |
+
+The finish flourish fires when the **last** working session goes idle, so a pet
+watching four of them celebrates once — when the work is actually done, not four
+times and not while three are still running.
 
 Several sessions collapse into one mood, and **waiting outranks working** — the
 session that needs you is the one worth surfacing.
