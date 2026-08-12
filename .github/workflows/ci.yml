@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A branch pushed three times in a minute does not need three full macOS builds.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  swift:
+    name: Swift build and tests
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: swift --version
+
+      - name: Build
+        run: swift build --package-path mac-app
+
+      - name: Test
+        run: swift test --package-path mac-app
+
+  bundle:
+    name: App bundle
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      # Runs the real release path on every PR. This job is why the packaging
+      # script cannot quietly rot between releases — the last break in it was a
+      # bash 3.2 incompatibility that only appears when the script actually runs.
+      - name: Build the .app
+        run: ./scripts/build-app.sh
+
+      - name: Inspect the bundle
+        run: |
+          set -euo pipefail
+          APP=build/claude-status.app
+          test -x "$APP/Contents/MacOS/claude-status"
+          test -f "$APP/Contents/Resources/AppIcon.icns"
+
+          echo "Identifier: $(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Contents/Info.plist")"
+          echo "Version:    $(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")"
+          echo "Build:      $(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Contents/Info.plist")"
+
+          # An accessory app that lost LSUIElement would start showing a Dock
+          # icon and stealing focus, which is a regression nobody would notice
+          # in a diff.
+          /usr/libexec/PlistBuddy -c 'Print LSUIElement' "$APP/Contents/Info.plist" | grep -q true
+
+          # Universal, or the download only works on half the Macs out there.
+          ARCHS="$(lipo -archs "$APP/Contents/MacOS/claude-status")"
+          echo "Archs:      $ARCHS"
+          for want in arm64 x86_64; do
+            case "$ARCHS" in *"$want"*) ;; *) echo "missing $want slice"; exit 1 ;; esac
+          done
+
+          codesign --verify --strict --verbose=2 "$APP"
+
+      - name: Icon renders at every required size
+        run: |
+          set -euo pipefail
+          ./build/claude-status.app/Contents/MacOS/claude-status --export-icon /tmp/icon.iconset
+          for size in 16x16 32x32 128x128 256x256 512x512; do
+            test -f "/tmp/icon.iconset/icon_${size}.png"
+            test -f "/tmp/icon.iconset/icon_${size}@2x.png"
+          done
+          echo "10 icon variants rendered"
+
+  shell:
+    name: Shell lint and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y shellcheck
+
+      # style is the strictest level; the scripts are small enough to hold to it.
+      - name: shellcheck
+        run: |
+          shellcheck --severity=style \
+            install.sh \
+            scripts/build-app.sh \
+            scripts/check-manifests.sh \
+            scripts/setup-remote.sh \
+            hooks/emit.sh \
+            tests/emit_test.sh
+
+      # The hook has three parser paths (jq, python3, and a sed fallback for
+      # machines with neither). The suite runs all three and asserts they agree,
+      # so this job needs jq present to be meaningful.
+      - name: emit.sh tests
+        run: |
+          jq --version
+          python3 --version
+          bash tests/emit_test.sh
+
+  manifests:
+    name: Manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate
+        run: ./scripts/check-manifests.sh

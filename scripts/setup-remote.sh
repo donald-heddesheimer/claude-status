@@ -50,10 +50,17 @@ echo
 echo "== 3. Verify the tunnel =="
 echo "   Reconnect first — RemoteForward only applies to new connections."
 echo
-echo "   ssh ${HOST} 'curl -s -m 2 -o /dev/null -w \"HTTP %{http_code}\\n\" \\"
-echo "     -X POST http://127.0.0.1:${PORT}/state \\"
-echo "     -H \"Content-Type: application/json\" \\"
-echo "     --data-raw \"{\\\"state\\\":\\\"waiting\\\",\\\"session_id\\\":\\\"tunnel-test\\\",\\\"host\\\":\\\"${HOST}\\\",\\\"remote\\\":true}\"'"
+# A quoted heredoc so the command below is stored exactly as the user must type
+# it — the previous version escaped every quote twice over to survive `echo`,
+# which made a command you cannot read and cannot safely edit. Placeholders are
+# substituted after the fact, delimited by | since an ssh alias cannot contain
+# one.
+cat <<'CURL' | sed -e "s|@HOST@|${HOST}|g" -e "s|@PORT@|${PORT}|g"
+   ssh @HOST@ 'curl -s -m 2 -o /dev/null -w "HTTP %{http_code}\n" \
+     -X POST http://127.0.0.1:@PORT@/state \
+     -H "Content-Type: application/json" \
+     --data-raw "{\"state\":\"waiting\",\"session_id\":\"tunnel-test\",\"host\":\"@HOST@\",\"remote\":true}"'
+CURL
 echo
 echo "   HTTP 200 and a pulsing pet means you're done."
 echo

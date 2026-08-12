@@ -223,6 +223,8 @@ build_body_fallback() {
       | head -n 1
   }
   # Strip anything that could break out of a JSON string literal.
+  # shellcheck disable=SC1003  # '"\\' is a two-character set: a quote and a
+  # backslash. Not an attempt to escape a single quote.
   sanitize() {
     printf '%s' "$1" | tr -d '"\\' | tr -d '\000-\037' | cut -c1-120
   }

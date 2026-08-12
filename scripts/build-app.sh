@@ -34,7 +34,10 @@ for argument in "$@"; do
   case "$argument" in
     --package) PACKAGE=true ;;
     --sparkle) USE_SPARKLE=true ;;
-    --help|-h) sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    # Reads the header block itself rather than a line range, which drifts the
+    # moment anyone edits the comment.
+    --help|-h) awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' \
+                 "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown option: $argument" >&2; exit 2 ;;
   esac
 done
@@ -198,8 +201,8 @@ if [ "$PACKAGE" = true ]; then
   ( cd "$BUILD" && shasum -a 256 "$(basename "$ZIP")" "$(basename "$DMG")" > SHA256SUMS )
 
   say "Artifacts"
-  ( cd "$BUILD" && ls -1 ./*.zip ./*.dmg SHA256SUMS | sed 's/^/    /' )
-  cat "$BUILD/SHA256SUMS" | sed 's/^/    /'
+  printf '    %s\n' "$(basename "$ZIP")" "$(basename "$DMG")" "SHA256SUMS"
+  sed 's/^/    /' "$BUILD/SHA256SUMS"
 else
   say "Built $APP"
 fi
