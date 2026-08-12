@@ -87,7 +87,7 @@ Uninstall with `rm -rf /Applications/claude-status.app`.
 | **Click** | Bring Claude to the front |
 | **Drag** | Move it; the position persists |
 | **Hover** | Panel listing every session it knows about |
-| **Right-click** | Settings, health, session list, reset position, quit |
+| **Right-click** | Settings, health, session list, follow one session, reset position, quit |
 
 ### What the pet is telling you
 
@@ -105,27 +105,25 @@ The finish flourish fires when the **last** working session goes idle, so a pet
 watching four of them celebrates once — when the work is actually done, not four
 times and not while three are still running.
 
-Several sessions collapse into one mood, and **waiting outranks working** — the
-session that needs you is the one worth surfacing.
+### Several sessions at once
 
-### Hover for the full picture
+![Three sessions, each with its own bubble colour, and the hover panel naming them](docs/sessions.png)
 
-```
-┌──────────────────────────────────────────┐
-│  2 sessions · 1 needs you                │
-│  ────────────────────────────────────    │
-│  devbox (ssh) — drone-es-rd              │
-│  waiting · allow Bash? · 4m              │
-│  ────────────────────────────────────    │
-│  local — claude-status                   │
-│  working · editing PetWindow.swift · 12s │
-│  ────────────────────────────────────    │
-│  up 3h 20m · 412 events                  │
-└──────────────────────────────────────────┘
-```
+Sessions collapse into one mood, and **waiting outranks working** — the session
+that needs you is the one worth surfacing. Hover for the full list, whatever
+needs you first.
 
-Whatever needs you sorts to the top. Right-click and pick a session to **pin** the
-pet to it — its mood, its bubble, alone — and **All sessions** to go back.
+With more than one running, each session gets **its own bubble colour**, so a
+glance tells you which one is talking. Colours are handed out in the order
+sessions appear and hold still for as long as the session lasts; the first is
+always black, so nothing changes until there is a second. The dots in the hover
+panel and the right-click menu are where you learn which is which.
+
+Or stop juggling: **Settings ▸ Sessions ▸ Follow one session at a time**, or just
+right-click and pick one. The pet's mood, bubble, animation and finish flourish
+then come from that session alone, and the hover panel lists it and says how many
+it's hiding. If it ends, the pet adopts another rather than going blank. **All
+sessions** puts everything back.
 
 ---
 
@@ -199,8 +197,9 @@ not a security boundary.** For an actual boundary, use a shared token — see
 
 Everything lives in **Settings**, from the pet's right-click menu: port, what a
 click opens, allowed accounts, the token file, launch at login, debug logging,
-and a **Health** tab showing whether the listener is bound, when the last event
-arrived, and why the last rejected event was rejected.
+which sessions the pet watches and how it colours them, and a **Health** tab
+showing whether the listener is bound, when the last event arrived, and why the
+last rejected event was rejected.
 
 Environment variables still work and **take precedence** over Settings, so
 existing setups keep behaving as they did. Settings marks any field an
@@ -212,6 +211,8 @@ environment variable is overriding rather than silently ignoring your input.
 | `CLAUDE_STATUS_USERS` | *(all)* | Accounts the pet accepts, comma separated. Also read from `~/.claude-status/users` |
 | `CLAUDE_STATUS_USER` | *(unset)* | Hook-side: stay silent unless running as this account |
 | `CLAUDE_STATUS_DEBUG` | `0` | `1` logs every event received, taken or dropped |
+| `CLAUDE_STATUS_FOLLOW_ONE` | `0` | `1` follows a single session instead of collapsing them |
+| `CLAUDE_STATUS_BUBBLE_COLORS` | `1` | `0` draws every thought bubble in the default black |
 | `CLAUDE_STATUS_CLICK_APP` | `/Applications/Claude.app` | What a click opens — app path or bundle id |
 | `CLAUDE_STATUS_ART` | `~/.claude-status/pet.png` | Override artwork with your own PNG |
 | `CLAUDE_STATUS_TOKEN_FILE` | `~/.claude-status/token` | Shared secret, if you want one |
@@ -270,7 +271,7 @@ with AppKit, and the hook needs only `curl`.
 ### Developing
 
 ```bash
-swift test --package-path mac-app     # 69 unit tests
+swift test --package-path mac-app     # 102 unit tests
 bash tests/emit_test.sh               # 55 hook tests, incl. one end to end
 ./scripts/check-manifests.sh          # manifests and changelog
 ```

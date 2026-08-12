@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// What the pet should be doing, collapsed from every session it knows about.
 enum PetMood {
@@ -15,6 +15,10 @@ struct SessionRow {
     let detail: String   // "working · Bash"
     let age: String      // time in the current state
     let isWaiting: Bool
+    /// Matches this session's thought bubble, which is the whole point of the
+    /// panel: it is where you learn what the colour on screen means. Nil when
+    /// there is nothing to tell apart.
+    let color: NSColor?
 }
 
 /// Everything the hover panel shows.
@@ -57,23 +61,106 @@ final class SessionStore {
     /// check a 90-second TTL is a test nobody runs.
     private let now: () -> Date
 
-    /// Session the pet is pinned to, or nil for "whatever needs you most".
+    /// Whether the pet follows one session instead of collapsing all of them.
     ///
-    /// Collapsing every session into one mood is the right default — you want
-    /// the pet to surface the thing that's blocked. But with several running at
-    /// once, the answer to "what is *that* one doing" is otherwise only in the
-    /// hover panel. Pinning makes the pet itself follow a single session.
-    var focus: String? {
+    /// Collapsing is the right default — you want the pet to surface whatever is
+    /// blocked, wherever it is. But with four sessions running, the caption
+    /// belongs to whichever one spoke last, and "what is *that* one doing" is
+    /// otherwise only answerable from the hover panel. Single-session mode
+    /// points the whole pet — mood, bubble, animation, celebration — at one.
+    private(set) var followsOneSession = false
+
+    /// The session being followed. Read-only: it moves through `follow` and
+    /// `followOne` so the mode and the selection can never disagree.
+    private(set) var focus: String?
+
+    /// The followed session, if it still exists.
+    private var focused: Session? {
+        guard let focus else { return nil }
+        return sessions[focus]
+    }
+
+    /// Follow one named session. Turns the mode on if it wasn't already, since
+    /// naming a session is the clearest possible statement that you want one.
+    func follow(_ id: String) {
+        guard !followsOneSession || focus != id else { return }
+        followsOneSession = true
+        focus = id
+        onChange?()
+    }
+
+    /// Turn single-session mode on or off, without naming a session — the pet
+    /// adopts one itself.
+    ///
+    /// That is also what happens at every launch: session ids are minted afresh
+    /// each time Claude Code starts, so an id saved yesterday names nothing
+    /// today. What persists is the *mode*, and the pet picks up whatever turns
+    /// up first.
+    func followOne(_ on: Bool) {
+        guard on != followsOneSession else { return }
+        followsOneSession = on
+        focus = nil
+        reconcileFocus()
+        onChange?()
+    }
+
+    /// Keeps single-session mode pointed at a session that exists.
+    ///
+    /// Called after anything that can remove sessions. When the followed one
+    /// ends, the pet adopts the next rather than going blank — a mode you have
+    /// to re-arm by hand every time a session ends is not a mode. Silent by
+    /// design: every caller fires `onChange` once the whole mutation is done.
+    private func reconcileFocus() {
+        guard followsOneSession else {
+            focus = nil
+            return
+        }
+        if let focus, sessions[focus] != nil { return }
+        focus = sorted.first?.key
+    }
+
+    // MARK: - Colour
+
+    /// Whether sessions get distinct bubble colours. Off falls everything back
+    /// to the ink the pet has always used.
+    var colorCoding = true {
         didSet {
-            guard focus != oldValue else { return }
+            guard colorCoding != oldValue else { return }
             onChange?()
         }
     }
 
-    /// The pinned session, if it still exists.
-    private var focused: Session? {
-        guard let focus else { return nil }
-        return sessions[focus]
+    /// Palette slot per session, handed out on arrival and released when the
+    /// session goes.
+    ///
+    /// Keyed to arrival rather than to position in any list, because every list
+    /// here moves: the hover panel sorts whatever needs you to the top, so a
+    /// colour taken from position would change the moment a session got
+    /// blocked — which is exactly the moment you need it to hold still. The
+    /// lowest free slot is reused, so the palette stays at the tight end of
+    /// itself rather than drifting through all six over an afternoon.
+    private var slots: [String: Int] = [:]
+
+    private func assignSlot(to id: String) {
+        guard slots[id] == nil else { return }
+        let taken = Set(slots.values)
+        var slot = 0
+        while taken.contains(slot) { slot += 1 }
+        slots[id] = slot
+    }
+
+    private func releaseSlots() {
+        guard slots.count != sessions.count else { return }
+        slots = slots.filter { sessions[$0.key] != nil }
+    }
+
+    /// A session's colour, or nil when there is nothing to tell apart.
+    ///
+    /// One session is always drawn in the default ink: colour answers "which of
+    /// these is talking", and with one session there is no question to answer.
+    func color(for id: String) -> NSColor? {
+        guard colorCoding, sessions.count > 1, let slot = slots[id] else { return nil }
+        return SessionPalette.color(slot: slot)
     }
 
     /// Pet lifetime and total traffic, for the hover panel's footer.
@@ -120,7 +207,8 @@ final class SessionStore {
 
         if event.state == "gone" {
             sessions.removeValue(forKey: event.sessionID)
-            if focus == event.sessionID { focus = nil }
+            releaseSlots()
+            reconcileFocus()
         } else {
             let now = self.now()
             let previous = sessions[event.sessionID]
@@ -141,7 +229,11 @@ final class SessionStore {
                 // read higher than a few seconds.
                 stateSince: previous?.state == event.state ? (previous?.stateSince ?? now) : now
             )
+            assignSlot(to: event.sessionID)
             evictOverflow()
+            // A first session arriving is what arms single-session mode after a
+            // launch, since the id it was following yesterday no longer exists.
+            reconcileFocus()
         }
         onChange?()
     }
@@ -156,8 +248,8 @@ final class SessionStore {
             .map(\.key)
         for key in doomed {
             sessions.removeValue(forKey: key)
-            if focus == key { focus = nil }
         }
+        releaseSlots()
     }
 
     func sweep() {
@@ -166,9 +258,11 @@ final class SessionStore {
         sessions = sessions.filter { _, session in
             now.timeIntervalSince(session.seen) < ttl(for: session.state)
         }
+        guard sessions.count != before else { return }
         // Don't strand the pet on a session that no longer exists.
-        if let focus, sessions[focus] == nil { self.focus = nil }
-        if sessions.count != before { onChange?() }
+        releaseSlots()
+        reconcileFocus()
+        onChange?()
     }
 
     /// Waiting outranks busy: a session blocked on you is the one thing you
@@ -197,46 +291,70 @@ final class SessionStore {
         return remote.host.first.map { String($0).uppercased() }
     }
 
+    /// What the bubble says, and which session is saying it.
+    ///
+    /// The two travel together because the colour is only meaningful attached to
+    /// the words it came with — deriving the text in one place and the speaker
+    /// in another is how a bubble ends up wearing the wrong session's colour.
+    struct Thought {
+        let text: String
+        let sessionID: String
+    }
+
     /// Short text for the thought bubble, or nil when the pet has nothing to
     /// say. Kept to a couple of words — it's a glance, not a status report.
-    var caption: String? {
-        // Pinned: say what that one session is doing, even when it's idle —
+    var thought: Thought? {
+        // Following one: say what that session is doing, even when it's idle —
         // you asked about it specifically, so "nothing right now" is an answer.
         //
         // The carried-forward tool is only true while the session is working or
         // blocked. Once it goes idle the turn is over, and still reporting
         // "editing PetPack.swift" would be a stale claim about live work.
-        if let focused {
+        if let focus, let focused {
+            let text: String
             switch focused.state {
             case "waiting":
-                return focused.tool.isEmpty ? "needs you" : "allow \(focused.tool)?"
+                text = focused.tool.isEmpty ? "needs you" : "allow \(focused.tool)?"
             case let state where Self.busyStates.contains(state):
-                return focused.tool.isEmpty
+                text = focused.tool.isEmpty
                     ? "thinking"
                     : Self.phrase(tool: focused.tool, detail: focused.detail)
             default:
-                return "idle"
+                text = "idle"
             }
+            return Thought(text: text, sessionID: focus)
         }
 
+        // Picked off `sorted` rather than out of the dictionary, whose order is
+        // arbitrary and unstable. With two sessions blocked at once that used to
+        // be invisible — the two captions read the same — but it would now flip
+        // the bubble's colour back and forth between them on every redraw.
         switch mood {
         case .asleep, .idle:
             return nil
         case .waiting:
             // Name the tool it's blocked on, so you know whether it's worth
             // getting up for before you get up.
-            let blocked = sessions.values.first { $0.state == "waiting" }
-            if let tool = blocked?.tool, !tool.isEmpty { return "allow \(tool)?" }
-            return "needs you"
+            guard let blocked = sorted.first(where: { $0.value.state == "waiting" }) else {
+                return nil
+            }
+            let tool = blocked.value.tool
+            return Thought(text: tool.isEmpty ? "needs you" : "allow \(tool)?",
+                           sessionID: blocked.key)
         case .busy:
-            let working = sessions.values
-                .filter { Self.busyStates.contains($0.state) }
-                .sorted { $0.seen > $1.seen }
-
-            guard let latest = working.first, !latest.tool.isEmpty else { return "thinking" }
-            return Self.phrase(tool: latest.tool, detail: latest.detail)
+            guard let latest = sorted.first(where: { Self.busyStates.contains($0.value.state) })
+            else { return nil }
+            let text = latest.value.tool.isEmpty
+                ? "thinking"
+                : Self.phrase(tool: latest.value.tool, detail: latest.value.detail)
+            return Thought(text: text, sessionID: latest.key)
         }
     }
+
+    var caption: String? { thought?.text }
+
+    /// The bubble's fill, or nil for the default ink.
+    var captionColor: NSColor? { thought.flatMap { color(for: $0.sessionID) } }
 
     /// Turn a tool call into something worth reading. "Bash" and "Edit" are true
     /// of half the session; "editing SessionStore.swift" actually tells you
@@ -261,36 +379,38 @@ final class SessionStore {
         }
     }
 
-    /// Sessions for the right-click menu, in the same order the hover panel uses
-    /// so the two never disagree about which one is first.
-    struct Choice {
-        let id: String
-        let label: String
-        let isFocused: Bool
-    }
-
-    var choices: [Choice] {
+    /// Sessions for the right-click menu and the Settings picker, in the same
+    /// order the hover panel uses so the three never disagree about which one is
+    /// first.
+    var choices: [SessionChoice] {
         sorted.map { id, session in
             let place = session.remote ? "\(session.host) (ssh)" : "local"
             let project = Self.projectName(session.cwd)
             let detail = session.tool.isEmpty
                 ? session.state
                 : "\(session.state) · \(Self.phrase(tool: session.tool, detail: session.detail))"
-            return Choice(
+            return SessionChoice(
                 id: id,
                 label: project.isEmpty ? "\(place) — \(detail)" : "\(place) · \(project) — \(detail)",
-                isFocused: id == focus
+                color: color(for: id),
+                isFollowed: id == focus
             )
         }
     }
 
     /// Whatever needs you first, then most recently active.
+    ///
+    /// The final tiebreak on id is not decoration. Swift's sort is not stable,
+    /// so two sessions seen in the same instant could otherwise swap places
+    /// between one redraw and the next — and this order now decides which
+    /// session the pet speaks for, and therefore what colour it speaks in.
     private var sorted: [(key: String, value: Session)] {
         sessions.sorted { a, b in
             if (a.value.state == "waiting") != (b.value.state == "waiting") {
                 return a.value.state == "waiting"
             }
-            return a.value.seen > b.value.seen
+            if a.value.seen != b.value.seen { return a.value.seen > b.value.seen }
+            return a.key < b.key
         }
     }
 
@@ -300,37 +420,46 @@ final class SessionStore {
     var stats: StatsReport {
         let now = self.now()
 
-        let rows = sorted.map { $0.value }
-            .map { session -> SessionRow in
-                var detail = session.state
-                if session.state == "waiting" {
-                    detail = session.tool.isEmpty
-                        ? "waiting for you"
-                        : "waiting · allow \(session.tool)?"
-                } else if !session.tool.isEmpty, Self.busyStates.contains(session.state) {
-                    detail = "\(session.state) · \(Self.phrase(tool: session.tool, detail: session.detail))"
-                }
-                return SessionRow(
-                    place: session.remote ? "\(session.host) (ssh)" : "local",
-                    project: Self.projectName(session.cwd),
-                    detail: detail,
-                    age: Self.duration(now.timeIntervalSince(session.stateSince)),
-                    isWaiting: session.state == "waiting"
-                )
-            }
+        // Following one session means the panel lists that one. Leaving the rest
+        // in would make the mode a half-measure: the pet claims to be showing
+        // you one session while its own panel shows you four.
+        let listed = followsOneSession ? sorted.filter { $0.key == focus } : sorted
 
-        return StatsReport(
-            headline: headline,
-            rows: rows,
-            footer: "up \(Self.duration(now.timeIntervalSince(startedAt))) · "
-                + "\(eventCount) event\(eventCount == 1 ? "" : "s")"
-        )
+        let rows = listed.map { id, session -> SessionRow in
+            var detail = session.state
+            if session.state == "waiting" {
+                detail = session.tool.isEmpty
+                    ? "waiting for you"
+                    : "waiting · allow \(session.tool)?"
+            } else if !session.tool.isEmpty, Self.busyStates.contains(session.state) {
+                detail = "\(session.state) · \(Self.phrase(tool: session.tool, detail: session.detail))"
+            }
+            return SessionRow(
+                place: session.remote ? "\(session.host) (ssh)" : "local",
+                project: Self.projectName(session.cwd),
+                detail: detail,
+                age: Self.duration(now.timeIntervalSince(session.stateSince)),
+                isWaiting: session.state == "waiting",
+                color: color(for: id)
+            )
+        }
+
+        // The hidden count is the escape hatch: without it, a pet quietly
+        // following one session looks identical to a pet that has lost the
+        // other three.
+        var footer = "up \(Self.duration(now.timeIntervalSince(startedAt))) · "
+            + "\(eventCount) event\(eventCount == 1 ? "" : "s")"
+        let hidden = sorted.count - listed.count
+        if hidden > 0 { footer += " · \(hidden) hidden" }
+
+        return StatsReport(headline: headline, rows: rows, footer: footer)
     }
 
     private var headline: String {
         if sessions.isEmpty { return "Nothing running" }
 
         let count = sessions.count
+        if followsOneSession, count > 1 { return "Following 1 of \(count)" }
         var parts = ["\(count) session\(count == 1 ? "" : "s")"]
 
         let waiting = sessions.values.filter { $0.state == "waiting" }.count

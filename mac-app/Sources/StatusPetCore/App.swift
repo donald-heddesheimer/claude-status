@@ -23,6 +23,9 @@ public enum StatusPetApp {
         if arguments.count >= 3, arguments[1] == "--export-states" {
             exit(StatesExporter.writeStrip(to: arguments[2]) ? 0 : 1)
         }
+        if arguments.count >= 3, arguments[1] == "--export-sessions" {
+            exit(SessionsExporter.writeStrip(to: arguments[2]) ? 0 : 1)
+        }
         if arguments.count >= 3, arguments[1] == "--export-animation" {
             exit(AnimationExporter.writeGIF(to: arguments[2]) ? 0 : 1)
         }
@@ -181,11 +184,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Settings
 
-    /// Called by the Settings window after anything that changes the wire.
-    func settingsChanged() {
-        users = UserFilter.from(preferences)
-        applyLoginItemPreference()
-        startListener()
+    /// Called by the Settings window after a change, told what the change costs.
+    func settingsChanged(_ change: SettingsWindowController.Change) {
+        switch change {
+        case .wire:
+            users = UserFilter.from(preferences)
+            applyLoginItemPreference()
+            startListener()
+        case .display:
+            // Nothing on the network cares how the pet looks, and bouncing the
+            // listener for a checkbox could drop a hook posting at that instant.
+            pack.applyPreferences()
+        }
     }
 
     private func applyLoginItemPreference() {
@@ -242,8 +252,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func showSettings(tab: SettingsWindowController.Tab) {
         if settings == nil {
-            settings = SettingsWindowController(preferences: preferences, health: health,
-                                                onChange: { [weak self] in self?.settingsChanged() })
+            let controller = SettingsWindowController(
+                preferences: preferences, health: health,
+                onChange: { [weak self] change in self?.settingsChanged(change) })
+            controller.choices = { [weak self] in self?.pack.choices ?? [] }
+            controller.onFollow = { [weak self] id in self?.pack.follow(id) }
+            settings = controller
         }
         settings?.show(tab: tab)
     }
