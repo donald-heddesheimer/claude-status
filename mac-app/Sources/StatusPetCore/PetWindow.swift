@@ -73,7 +73,10 @@ final class PetView: NSView {
     private var pose = PetPose()
     private var timer: Timer?
 
-    private let cell: CGFloat = 8
+    /// Half what it was, because the sprite grid is twice as fine. The critter
+    /// occupies the same 128pt as before; only the unit it is measured in
+    /// changed.
+    private let cell: CGFloat = 4
 
     /// Gap between the critter and its thought bubble, clear of the pulse ring.
     private static let bubbleGap: CGFloat = 26
@@ -115,6 +118,23 @@ final class PetView: NSView {
     }
 
     deinit { timer?.invalidate() }
+
+    /// Advances the animation one frame and draws it into `rep`, with no window
+    /// and no run loop.
+    ///
+    /// This is how `--export-animation` builds the README's GIF: the real
+    /// animator driving the real drawing code, rather than a mock-up that would
+    /// start lying the first time either changed. The scheduled timer never
+    /// fires here because nothing is running the main run loop, so the clock
+    /// advances only by the amount asked for — which is also what makes the
+    /// output reproducible.
+    func drawHeadlessFrame(advancingBy delta: CFTimeInterval, into rep: NSBitmapImageRep) {
+        pose = animator.advance(by: delta)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        draw(bounds)
+        NSGraphicsContext.restoreGraphicsState()
+    }
 
     // MARK: - Palette
 

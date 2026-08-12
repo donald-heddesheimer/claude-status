@@ -29,6 +29,10 @@ final class PetController: NSObject {
         didSet { view.agentLabel = agentLabel }
     }
 
+    /// Extra menu items contributed by the app. Rebuilt on every right-click, so
+    /// items whose titles report live state stay current.
+    var menuExtras: (() -> [NSMenuItem])?
+
     init(store: SessionStore, agent: String = PetPack.primary, slot: Int = 0) {
         self.store = store
         self.agent = agent
@@ -63,12 +67,11 @@ final class PetController: NSObject {
         panel.orderFrontRegardless()
     }
 
-    /// Clicking the pet brings Claude to the front. Point
-    /// `CLAUDE_STATUS_CLICK_APP` at any app path or bundle id to change it —
-    /// your terminal or editor, if that's where you actually work.
+    /// Clicking the pet brings Claude to the front. Settings ▸ General points it
+    /// at any app path or bundle id — your terminal or editor, if that's where
+    /// you actually work.
     private static func openClaude() {
-        let target = ProcessInfo.processInfo.environment["CLAUDE_STATUS_CLICK_APP"]
-            ?? "/Applications/Claude.app"
+        let target = Preferences.shared.clickTarget
 
         let url: URL?
         if target.hasPrefix("/") {
@@ -90,8 +93,7 @@ final class PetController: NSObject {
     /// Optional override artwork. Missing art is fine — the view draws the
     /// critter from its pixel map instead.
     private static func loadArt() -> NSImage? {
-        let path = ProcessInfo.processInfo.environment["CLAUDE_STATUS_ART"]
-            ?? (NSHomeDirectory() as NSString).appendingPathComponent(".claude-status/pet.png")
+        let path = Preferences.shared.artPath
         guard FileManager.default.fileExists(atPath: path) else { return nil }
         return NSImage(contentsOfFile: path)
     }
@@ -251,6 +253,13 @@ final class PetController: NSObject {
         let reset = NSMenuItem(title: "Reset Position", action: #selector(resetPosition), keyEquivalent: "")
         reset.target = self
         menu.addItem(reset)
+
+        if let extras = menuExtras?(), !extras.isEmpty {
+            menu.addItem(.separator())
+            extras.forEach(menu.addItem)
+        }
+
+        menu.addItem(.separator())
 
         let quit = NSMenuItem(title: "Quit Pet", action: #selector(quitPet), keyEquivalent: "")
         quit.target = self

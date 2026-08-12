@@ -1,0 +1,93 @@
+name: Bug report
+description: Something doesn't work the way it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please don't report security issues here — use
+        [the advisory form](https://github.com/donald-heddesheimer/claude-status/security/advisories/new)
+        so it can be fixed before it's public.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: And what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: status
+    attributes:
+      label: Output of /claude-status:status
+      description: >
+        Run this inside the Claude Code session that isn't behaving. It reports
+        whether you're local or remote, whether anything is listening, and
+        whether a test event lands — which answers most of the questions this
+        template would otherwise have to ask.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where is Claude Code running
+      options:
+        - Same Mac as the pet
+        - A remote host over SSH
+        - Both, and only one of them is broken
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: "`sw_vers -productVersion`"
+      placeholder: "14.5"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: claude-status version
+      description: >
+        Settings shows it, or `/usr/libexec/PlistBuddy -c 'Print
+        CFBundleShortVersionString' /Applications/claude-status.app/Contents/Info.plist`
+      placeholder: "0.4.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it
+      options:
+        - ./install.sh
+        - swift run
+        - Downloaded a release build
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: health
+    attributes:
+      label: Settings → Health
+      description: >
+        Optional, but it usually contains the answer — particularly the reason
+        given for the last rejected event.
+      render: text
+
+  - type: textarea
+    id: debug
+    attributes:
+      label: Debug log
+      description: >
+        Optional. Enable debug logging in Settings (or set
+        `CLAUDE_STATUS_DEBUG=1`), reproduce, and paste what the pet printed. It
+        logs every event received, taken or dropped, with the reason.
+      render: text

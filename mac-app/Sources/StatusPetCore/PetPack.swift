@@ -12,6 +12,12 @@ final class PetPack {
     /// Agents already reported as ignored, so a busy one says so once.
     private var reported: Set<String> = []
 
+    /// App-level menu items (Settings, Health, Updates) appended to every pet's
+    /// context menu. Supplied by the app so the pet stays ignorant of it.
+    var menuExtras: (() -> [NSMenuItem])? {
+        didSet { claude.menuExtras = menuExtras }
+    }
+
     init() {
         claude.show()
     }

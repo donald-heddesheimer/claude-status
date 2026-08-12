@@ -1,0 +1,47 @@
+name: Feature request
+description: Suggest something the pet should do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Worth a look at [ROADMAP.md](https://github.com/donald-heddesheimer/claude-status/blob/main/ROADMAP.md) first — it lists
+        what's planned and, more usefully, what's been considered and declined
+        along with the reasoning.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem
+      description: >
+        What you were trying to do when you wanted this. A described problem
+        usually has better solutions than the one that prompted the request.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you have in mind
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - The pet — appearance, motion, what it shows
+        - The hook — what gets reported
+        - Remote/SSH
+        - Settings, health, or setup
+        - Packaging and install
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you've tried or ruled out
+      description: Optional.

@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or setup help
+    url: https://github.com/donald-heddesheimer/claude-status/discussions
+    about: >
+      Not sure whether it's a bug? Start here. Check SUPPORT.md first — it
+      covers the usual suspects, including hooks only applying to newly started
+      sessions.
+  - name: Security vulnerability
+    url: https://github.com/donald-heddesheimer/claude-status/security/advisories/new
+    about: >
+      Report privately so it can be fixed before it's public. See SECURITY.md
+      for the threat model — in particular, the username filter is documented as
+      convenience filtering, not a boundary.

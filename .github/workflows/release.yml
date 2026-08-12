@@ -1,0 +1,164 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build the artifacts but do not publish a release
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # build-app.sh derives CFBundleVersion from the commit count
+
+      # A tag that disagrees with the manifest produces a release whose notes
+      # describe a different version than the app reports about itself.
+      - name: Tag agrees with the manifest
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/v}"
+          MANIFEST="$(jq -r .version .claude-plugin/plugin.json)"
+          echo "tag=$TAG manifest=$MANIFEST"
+          [ "$TAG" = "$MANIFEST" ] || {
+            echo "::error::tag v$TAG does not match plugin.json version $MANIFEST"
+            exit 1
+          }
+
+      - name: Manifest checks
+        run: ./scripts/check-manifests.sh
+
+      - name: Tests
+        run: |
+          swift test --package-path mac-app
+          bash tests/emit_test.sh
+
+      # Signing is entirely optional. With no secrets configured this produces
+      # an ad-hoc signed build, and the release notes say so rather than letting
+      # someone discover it when Gatekeeper refuses to open the app.
+      - name: Import signing certificate
+        id: signing
+        env:
+          CERT_P12: ${{ secrets.DEVELOPER_ID_P12 }}
+          CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CERT_P12:-}" ]; then
+            echo "no certificate configured — this will be an ad-hoc build"
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          KEYCHAIN=build.keychain
+          PASSWORD="$(openssl rand -hex 20)"
+          security create-keychain -p "$PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain
+          printf '%s' "$CERT_P12" | base64 --decode > /tmp/cert.p12
+          security import /tmp/cert.p12 -k "$KEYCHAIN" -P "$CERT_PASSWORD" \
+            -T /usr/bin/codesign
+          rm -f /tmp/cert.p12
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$PASSWORD" "$KEYCHAIN" >/dev/null
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build, package, notarise
+        env:
+          DEVELOPER_ID: ${{ secrets.DEVELOPER_ID }}
+          AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
+          AC_API_ISSUER: ${{ secrets.AC_API_ISSUER }}
+          AC_API_KEY_P8: ${{ secrets.AC_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          # notarytool wants a file on disk, not the key material in a variable.
+          if [ -n "${AC_API_KEY_P8:-}" ]; then
+            printf '%s' "$AC_API_KEY_P8" | base64 --decode > /tmp/ac_key.p8
+            export AC_API_KEY=/tmp/ac_key.p8
+          fi
+          ./scripts/build-app.sh --package
+          rm -f /tmp/ac_key.p8
+
+      - name: Write release notes
+        id: notes
+        run: |
+          set -euo pipefail
+          VERSION="$(jq -r .version .claude-plugin/plugin.json)"
+          {
+            # Pull this version's section out of the changelog rather than
+            # regenerating it from commit subjects, which read as noise.
+            #
+            # Matched as a literal prefix, not a regex: awk's -v processes
+            # backslash escapes, so an escaped "\[" arrives as a bare "[" and
+            # silently turns the heading into a character class that matches
+            # nothing. This produced empty release notes rather than an error.
+            awk -v v="## [$VERSION]" '
+              index($0, v) == 1 { found = 1; next }
+              found && /^## \[/ { exit }
+              found { print }
+            ' CHANGELOG.md
+
+            echo
+            echo '## Verifying your download'
+            echo
+            echo '```'
+            sed 's/^/    /' build/SHA256SUMS
+            echo '```'
+            echo
+
+            if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+              echo 'This build is signed with a Developer ID and notarised by Apple.'
+              echo 'It should open normally.'
+            else
+              echo '> ### This build is not signed by an Apple Developer ID'
+              echo '>'
+              echo '> macOS quarantines downloaded apps and refuses to open any that'
+              echo '> are not notarised, so **double-clicking this will fail** with a'
+              echo '> message about the app being damaged or from an unidentified'
+              echo '> developer. The signature is valid; it is simply not one Apple'
+              echo '> vouches for.'
+              echo '>'
+              echo '> The supported way to install is to build it yourself, which'
+              echo '> takes about ten seconds and is never quarantined:'
+              echo '>'
+              echo '> ```bash'
+              echo '> git clone https://github.com/donald-heddesheimer/claude-status'
+              echo '> cd claude-status && ./install.sh'
+              echo '> ```'
+              echo '>'
+              echo '> These artifacts are published for people who want to inspect'
+              echo '> or diff a build, not as the recommended install path.'
+            fi
+          } > /tmp/notes.md
+          cat /tmp/notes.md
+
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/v') && !inputs.dry_run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF#refs/tags/}" \
+            --title "${GITHUB_REF#refs/tags/}" \
+            --notes-file /tmp/notes.md \
+            build/*.zip build/*.dmg build/SHA256SUMS
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-status-build
+          path: |
+            build/*.zip
+            build/*.dmg
+            build/SHA256SUMS
+          if-no-files-found: error
