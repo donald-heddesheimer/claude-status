@@ -39,6 +39,8 @@ The release that makes this installable by someone who isn't me.
 - In-app **Settings** window — port, click target, allowed accounts, token file,
   launch at login. Configuration no longer requires exported environment
   variables, though those still win where set, and the window says so.
+- **"Clicking does nothing" option**, for anyone who just wants a status light
+  on the desktop rather than a launcher.
 - **Health** view: whether the listener is bound, when the last event arrived,
   which peers are silent, and why the last rejected event was rejected.
 - **SSH setup wizard**: detects host aliases, proposes a `RemoteForward` line,
@@ -47,7 +49,7 @@ The release that makes this installable by someone who isn't me.
 - Launch at login, via `SMAppService`.
 - Optional Sparkle auto-updates, off by default and behind a build flag, so the
   default build fetches nothing.
-- Test suites: 104 Swift unit tests and 55 shell tests for `hooks/emit.sh`.
+- Test suites: 106 Swift unit tests and 55 shell tests for `hooks/emit.sh`.
 - CI on every push and pull request: Swift build and tests, app bundle assembly,
   shellcheck, the shell suite, and manifest validation.
 - Governance: `CONTRIBUTING.md`, `SECURITY.md`, `SUPPORT.md`, `ROADMAP.md`,

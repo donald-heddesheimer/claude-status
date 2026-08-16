@@ -233,6 +233,8 @@ public final class SettingsWindowController: NSWindowController {
             },
             label("An app path or a bundle id. Point it at your terminal or editor if that's "
                 + "where you actually work.", secondary: true),
+            checkbox(Preferences.Keys.clickDisabled, title: "Clicking does nothing",
+                     on: preferences.clickDisabled, action: #selector(toggleClickDisabled(_:))).view,
             separator(),
             row(Preferences.Keys.artPath, value: preferences.artPath) { [weak self] raw in
                 self?.preferences.artPath = raw
@@ -413,6 +415,11 @@ public final class SettingsWindowController: NSWindowController {
     @objc private func toggleDebug(_ sender: NSButton) {
         preferences.debugLogging = sender.state == .on
         onChange(.wire)
+    }
+
+    @objc private func toggleClickDisabled(_ sender: NSButton) {
+        preferences.clickDisabled = sender.state == .on
+        onChange(.display)
     }
 
     @objc private func toggleFollowOne(_ sender: NSButton) {

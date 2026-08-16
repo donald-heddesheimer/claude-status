@@ -96,6 +96,7 @@ final class PetController: NSObject {
     /// at any app path or bundle id — your terminal or editor, if that's where
     /// you actually work.
     private static func openClaude() {
+        guard !Preferences.shared.clickDisabled else { return }
         let target = Preferences.shared.clickTarget
 
         let url: URL?

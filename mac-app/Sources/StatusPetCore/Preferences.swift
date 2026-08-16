@@ -60,9 +60,10 @@ public final class Preferences {
         public static let debugLogging = Field(key: "debugLogging", environmentVariable: "CLAUDE_STATUS_DEBUG", label: "Log every event")
         public static let followOneSession = Field(key: "followOneSession", environmentVariable: "CLAUDE_STATUS_FOLLOW_ONE", label: "Follow one session")
         public static let colorCodedBubbles = Field(key: "colorCodedBubbles", environmentVariable: "CLAUDE_STATUS_BUBBLE_COLORS", label: "Colour-code bubbles")
+        public static let clickDisabled = Field(key: "clickDisabled", environmentVariable: "CLAUDE_STATUS_CLICK_DISABLE", label: "Clicking does nothing")
 
         public static let all = [port, clickTarget, allowedUsers, tokenPath, artPath, debugLogging,
-                                 followOneSession, colorCodedBubbles]
+                                 followOneSession, colorCodedBubbles, clickDisabled]
     }
 
     private let defaults: KeyValueStore
@@ -97,6 +98,13 @@ public final class Preferences {
     public var clickTarget: String {
         get { string(Keys.clickTarget) ?? "/Applications/Claude.app" }
         set { defaults.set(newValue, forKey: Keys.clickTarget.key) }
+    }
+
+    /// When on, clicking the pet does nothing instead of opening `clickTarget`.
+    /// For anyone who just wants a status light on the desktop.
+    public var clickDisabled: Bool {
+        get { flag(Keys.clickDisabled, default: false) }
+        set { defaults.set(newValue, forKey: Keys.clickDisabled.key) }
     }
 
     public var tokenPath: String {
