@@ -121,6 +121,21 @@ final class PreferencesTests: XCTestCase {
         XCTAssertTrue(preferences.followOneSession)
     }
 
+    func testClickingIsEnabledUntilYouTurnItOff() {
+        let (preferences, _) = scratch()
+        XCTAssertFalse(preferences.clickDisabled)
+
+        preferences.clickDisabled = true
+        XCTAssertTrue(preferences.clickDisabled)
+    }
+
+    func testTheEnvironmentCanForceClickOff() {
+        let (preferences, defaults) = scratch(["CLAUDE_STATUS_CLICK_DISABLE": "1"])
+        defaults.set(false, forKey: "clickDisabled")
+
+        XCTAssertTrue(preferences.clickDisabled)
+    }
+
     // MARK: - Migration
 
     func testMigratesTheLegacyUsersFileOnce() throws {

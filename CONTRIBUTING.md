@@ -31,7 +31,7 @@ settings.
 Three suites, all of which CI runs on every pull request:
 
 ```bash
-swift test --package-path mac-app     # 104 unit tests
+swift test --package-path mac-app     # 106 unit tests
 bash tests/emit_test.sh               # 55 hook tests
 ./scripts/check-manifests.sh          # manifest and changelog consistency
 ```

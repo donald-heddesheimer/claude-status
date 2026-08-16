@@ -214,6 +214,7 @@ environment variable is overriding rather than silently ignoring your input.
 | `CLAUDE_STATUS_FOLLOW_ONE` | `0` | `1` follows a single session instead of collapsing them |
 | `CLAUDE_STATUS_BUBBLE_COLORS` | `1` | `0` draws every thought bubble in the default black |
 | `CLAUDE_STATUS_CLICK_APP` | `/Applications/Claude.app` | What a click opens — app path or bundle id |
+| `CLAUDE_STATUS_CLICK_DISABLE` | `0` | `1` makes clicking the pet do nothing |
 | `CLAUDE_STATUS_ART` | `~/.claude-status/pet.png` | Override artwork with your own PNG |
 | `CLAUDE_STATUS_TOKEN_FILE` | `~/.claude-status/token` | Shared secret, if you want one |
 
@@ -271,7 +272,7 @@ with AppKit, and the hook needs only `curl`.
 ### Developing
 
 ```bash
-swift test --package-path mac-app     # 104 unit tests
+swift test --package-path mac-app     # 106 unit tests
 bash tests/emit_test.sh               # 55 hook tests, incl. one end to end
 ./scripts/check-manifests.sh          # manifests and changelog
 ```
