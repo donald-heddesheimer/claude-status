@@ -26,6 +26,9 @@ public enum StatusPetApp {
         if arguments.count >= 3, arguments[1] == "--export-sessions" {
             exit(SessionsExporter.writeStrip(to: arguments[2]) ? 0 : 1)
         }
+        if arguments.count >= 3, arguments[1] == "--export-agents" {
+            exit(AgentsExporter.writeStrip(to: arguments[2]) ? 0 : 1)
+        }
         if arguments.count >= 3, arguments[1] == "--export-animation" {
             exit(AnimationExporter.writeGIF(to: arguments[2]) ? 0 : 1)
         }

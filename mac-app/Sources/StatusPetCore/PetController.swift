@@ -23,12 +23,6 @@ final class PetController: NSObject {
     private var statsTimer: Timer?
     private var statsSize: NSSize = .zero
 
-    /// Agent name drawn under the critter. Nil when there's only one pet and
-    /// naming it would be noise.
-    var agentLabel: String? {
-        didSet { view.agentLabel = agentLabel }
-    }
-
     /// Extra menu items contributed by the app. Rebuilt on every right-click, so
     /// items whose titles report live state stay current.
     var menuExtras: (() -> [NSMenuItem])?
@@ -42,7 +36,7 @@ final class PetController: NSObject {
         super.init()
 
         panel.contentView = view
-        view.tint = PetPack.tint(for: agent)
+        view.tint = PetView.clay
         view.petImage = Self.loadArt()
         view.menuProvider = { [weak self] in self?.buildMenu() ?? NSMenu() }
         view.onClick = { Self.openClaude() }
@@ -149,6 +143,10 @@ final class PetController: NSObject {
         let thought = store.thought
         view.caption = thought?.text
         view.bubbleTint = thought.flatMap { store.color(for: $0.sessionID) } ?? SessionPalette.ink
+
+        // Named only once a second agent makes it a real question — see
+        // `SessionStore.speakingAgent`.
+        view.agentLabel = store.speakingAgent
 
         if finished { view.celebrate() }
 

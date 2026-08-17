@@ -208,20 +208,40 @@ centre, which made the choices either side of a 12-wide body 10 (too lean) and 1
 (wider still). 11 sits where it should and costs nothing but a denominator.
 
 The app icon and every picture in the README are rendered from this same map
-(`--export-icon`, `--export-states`, `--export-sessions`, `--export-animation`).
+(`--export-icon`, `--export-states`, `--export-sessions`, `--export-agents`,
+`--export-animation`).
 Hand-drawn documentation art drifts from the thing it documents and nobody
 notices.
 
 ## Other agents
 
-Every event carries `agent_source`. The pet reads it and **ignores anything that
-isn't Claude Code** — a Codex session is dropped rather than folded in, since
-showing it as one of Claude's would misreport both.
+Every event carries `agent_source`. Codex, opencode, or anything else speaking
+the same protocol shares Claude's pet rather than getting a window of its own —
+a second critter competing for desktop space wasn't worth it for what amounts
+to a colour and a name.
 
-One pet per agent is written and working — each with its own critter, session
-list, colour and saved position — but parked behind a `TODO` in
-[`PetPack.swift`](../mac-app/Sources/StatusPetCore/PetPack.swift), waiting on a
-second agent actually worth watching.
+**One agent looks exactly as it always has.** Colour still tells that agent's
+own sessions apart from each other, same as [Several sessions at
+once](#several-sessions-at-once) describes. Nothing about a solo Claude session
+changes because the code can now hear from more than one agent.
+
+**A second agent gets a colour and a name.** Once `SessionStore.multipleAgents`
+is true, colour stops answering "which session" and starts answering "which
+agent" — every session belonging to one agent shares a slot, handed out and
+released the same arrival-ordered way sessions already were. The name appears
+under the critter, in the same spot a separate-pet-per-agent build used to put
+it: built once, shelved when that build was parked, and picked back up here
+rather than invented twice.
+
+**The label always names whoever the bubble is quoting.** Both come from the
+same `Thought` — deriving them separately is how a label ends up next to the
+wrong agent's words, the same reasoning [colour](#colour) already follows for
+sessions.
+
+A pet per agent was written and worked — its own critter, session list, colour
+and saved position, routed on `agent_source`. It's still true, just not what
+this does: watching a second agent turned out to want a badge on the one pet
+you already look at, not a second thing to look at.
 
 > [petdex](https://github.com/agiagentsdev/agentpets-dev) reserves the same field
 > for the same purpose — *"stamp `agent_source` so the sidecar can route per-pet

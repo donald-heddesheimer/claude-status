@@ -38,6 +38,7 @@ final class SessionStore {
         var tool: String
         var detail: String
         var cwd: String
+        var agent: String     // "claude-code", "codex", … — see `agent_source`
         var seen: Date        // last ping of any kind
         var firstSeen: Date   // when this session first reported
         var stateSince: Date  // when it entered the state it's in now
@@ -167,13 +168,72 @@ final class SessionStore {
         slots = slots.filter { sessions[$0.key] != nil }
     }
 
+    /// Same idea, one level up: a slot per *agent* rather than per session, for
+    /// when more than one is reporting to this pet. Two Codex sessions should
+    /// wear the same colour and one Claude session shouldn't wear Codex's.
+    private var agentSlots: [String: Int] = [:]
+
+    private func assignAgentSlot(to agent: String) {
+        guard agentSlots[agent] == nil else { return }
+        let taken = Set(agentSlots.values)
+        var slot = 0
+        while taken.contains(slot) { slot += 1 }
+        agentSlots[agent] = slot
+    }
+
+    private func releaseAgentSlots() {
+        let live = Set(sessions.values.map(\.agent))
+        guard agentSlots.count != live.count else { return }
+        agentSlots = agentSlots.filter { live.contains($0.key) }
+    }
+
+    /// True once more than one agent is talking to this pet — the point at
+    /// which it's worth spending a colour and a word on saying which is which.
+    var multipleAgents: Bool {
+        var seen: Set<String> = []
+        for session in sessions.values {
+            seen.insert(session.agent)
+            if seen.count > 1 { return true }
+        }
+        return false
+    }
+
     /// A session's colour, or nil when there is nothing to tell apart.
     ///
-    /// One session is always drawn in the default ink: colour answers "which of
-    /// these is talking", and with one session there is no question to answer.
+    /// With more than one agent reporting in, the colour answers "which agent
+    /// is this" and every session of that agent shares it. Otherwise it answers
+    /// "which session is this", same as always. One session of one agent is
+    /// always drawn in the default ink — colour is a question, and there's
+    /// nothing to ask yet.
     func color(for id: String) -> NSColor? {
-        guard colorCoding, sessions.count > 1, let slot = slots[id] else { return nil }
+        guard colorCoding, let session = sessions[id] else { return nil }
+        if multipleAgents {
+            guard let slot = agentSlots[session.agent] else { return nil }
+            return SessionPalette.color(slot: slot)
+        }
+        guard sessions.count > 1, let slot = slots[id] else { return nil }
         return SessionPalette.color(slot: slot)
+    }
+
+    /// A short, human name for an agent id. Unrecognised ones — anything
+    /// speaking the same protocol that isn't in this short list yet — fall back
+    /// to a capitalised version of whatever they call themselves.
+    static func displayName(_ agent: String) -> String {
+        switch agent {
+        case "claude-code": return "Claude"
+        case "codex":       return "Codex"
+        case "opencode":    return "opencode"
+        case "antigravity": return "Antigravity"
+        default:            return agent.capitalized
+        }
+    }
+
+    /// Where a session is running, prefixed with which agent it is once that's
+    /// a real question — a lone agent's own name would just be noise.
+    private func place(for session: Session) -> String {
+        let base = session.remote ? "\(session.host) (ssh)" : "local"
+        guard multipleAgents else { return base }
+        return "\(Self.displayName(session.agent)) · \(base)"
     }
 
     /// Pet lifetime and total traffic, for the hover panel's footer.
@@ -222,6 +282,7 @@ final class SessionStore {
         if event.state == "gone" {
             sessions.removeValue(forKey: event.sessionID)
             releaseSlots()
+            releaseAgentSlots()
             reconcileFocus()
         } else {
             let now = self.now()
@@ -236,6 +297,7 @@ final class SessionStore {
                 tool: event.tool.isEmpty ? (previous?.tool ?? "") : event.tool,
                 detail: event.tool.isEmpty ? (previous?.detail ?? "") : event.detail,
                 cwd: event.cwd.isEmpty ? (previous?.cwd ?? "") : event.cwd,
+                agent: event.agentSource,
                 seen: now,
                 firstSeen: previous?.firstSeen ?? now,
                 // Only restart the clock on a real transition. Otherwise every
@@ -244,6 +306,7 @@ final class SessionStore {
                 stateSince: previous?.state == event.state ? (previous?.stateSince ?? now) : now
             )
             assignSlot(to: event.sessionID)
+            assignAgentSlot(to: event.agentSource)
             evictOverflow()
             // A first session arriving is what arms single-session mode after a
             // launch, since the id it was following yesterday no longer exists.
@@ -264,6 +327,7 @@ final class SessionStore {
             sessions.removeValue(forKey: key)
         }
         releaseSlots()
+        releaseAgentSlots()
     }
 
     func sweep() {
@@ -275,6 +339,7 @@ final class SessionStore {
         guard sessions.count != before else { return }
         // Don't strand the pet on a session that no longer exists.
         releaseSlots()
+        releaseAgentSlots()
         reconcileFocus()
         lastChangeWasWork = true
         onChange?()
@@ -314,6 +379,7 @@ final class SessionStore {
     struct Thought {
         let text: String
         let sessionID: String
+        let agent: String
     }
 
     /// Short text for the thought bubble, or nil when the pet has nothing to
@@ -337,7 +403,7 @@ final class SessionStore {
             default:
                 text = "idle"
             }
-            return Thought(text: text, sessionID: focus)
+            return Thought(text: text, sessionID: focus, agent: focused.agent)
         }
 
         // Picked off `sorted` rather than out of the dictionary, whose order is
@@ -354,16 +420,25 @@ final class SessionStore {
                 return nil
             }
             let tool = blocked.value.tool
-            return Thought(text: tool.isEmpty ? "needs you" : "allow \(tool)?",
-                           sessionID: blocked.key)
+            let text = tool.isEmpty ? "needs you" : "allow \(tool)?"
+            return Thought(text: text, sessionID: blocked.key, agent: blocked.value.agent)
         case .busy:
             guard let latest = sorted.first(where: { Self.busyStates.contains($0.value.state) })
             else { return nil }
             let text = latest.value.tool.isEmpty
                 ? "thinking"
                 : Self.phrase(tool: latest.value.tool, detail: latest.value.detail)
-            return Thought(text: text, sessionID: latest.key)
+            return Thought(text: text, sessionID: latest.key, agent: latest.value.agent)
         }
+    }
+
+    /// Which agent's name to show under the critter, or nil when there's only
+    /// one and naming it would be noise. Follows the same session `thought`
+    /// speaks for, so the label never names a different session than the
+    /// bubble above it is quoting.
+    var speakingAgent: String? {
+        guard multipleAgents, let thought else { return nil }
+        return Self.displayName(thought.agent)
     }
 
     var caption: String? { thought?.text }
@@ -399,7 +474,7 @@ final class SessionStore {
     /// first.
     var choices: [SessionChoice] {
         sorted.map { id, session in
-            let place = session.remote ? "\(session.host) (ssh)" : "local"
+            let place = place(for: session)
             let project = Self.projectName(session.cwd)
             let detail = session.tool.isEmpty
                 ? session.state
@@ -450,7 +525,7 @@ final class SessionStore {
                 detail = "\(session.state) · \(Self.phrase(tool: session.tool, detail: session.detail))"
             }
             return SessionRow(
-                place: session.remote ? "\(session.host) (ssh)" : "local",
+                place: place(for: session),
                 project: Self.projectName(session.cwd),
                 detail: detail,
                 age: Self.duration(now.timeIntervalSince(session.stateSince)),

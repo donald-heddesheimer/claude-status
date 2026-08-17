@@ -27,6 +27,11 @@ The release that makes this installable by someone who isn't me.
   session. The first is always black — the ink the bubble has always used — so a
   lone session looks exactly as it did. Matching dots in the hover panel and the
   right-click menu say which is which.
+- **Other agents share the pet instead of being dropped.** Codex, opencode, or
+  anything else speaking the same protocol now feeds the same critter rather
+  than being ignored. One agent looks exactly like it always has; a second gets
+  its own colour — shared by all of that agent's sessions — and its name under
+  the critter, rather than a second window competing for desktop space.
 - **The pet celebrates a finished turn.** When the last working session goes
   idle it hops with a delighted `^ ^` and throws a few sparks, for two and a
   half seconds, then settles. Reads off the collapsed mood, so a pet watching
@@ -49,7 +54,7 @@ The release that makes this installable by someone who isn't me.
 - Launch at login, via `SMAppService`.
 - Optional Sparkle auto-updates, off by default and behind a build flag, so the
   default build fetches nothing.
-- Test suites: 106 Swift unit tests and 55 shell tests for `hooks/emit.sh`.
+- Test suites: 112 Swift unit tests and 55 shell tests for `hooks/emit.sh`.
 - CI on every push and pull request: Swift build and tests, app bundle assembly,
   shellcheck, the shell suite, and manifest validation.
 - Governance: `CONTRIBUTING.md`, `SECURITY.md`, `SUPPORT.md`, `ROADMAP.md`,
