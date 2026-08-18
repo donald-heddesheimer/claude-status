@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # claude-status: emit one lifecycle state event to the desktop pet.
 #
-# Invoked by Claude Code hooks with the target state as $1, and the hook's
-# JSON payload on stdin. Runs on whatever machine Claude Code runs on:
+# Invoked by hooks with the target state as $1 and, optionally, which agent
+# is calling as $2 (default "claude-code" — Claude Code is still the only
+# caller wired up by hooks.json in this repo). The hook's JSON payload comes
+# on stdin. Runs on whatever machine the agent runs on:
 #
 #   local sessions  -> 127.0.0.1:7777 is the pet app itself
 #   ssh sessions    -> 127.0.0.1:7777 is an SSH RemoteForward back to your Mac
@@ -10,10 +12,24 @@
 # Identical config works in both cases, which is the whole point of using
 # loopback HTTP rather than a file or a Darwin notification.
 #
+# $2 exists so another agent's hook config can point straight at this script
+# rather than needing a fork of it — the payload shape assumed below
+# (tool_name/tool_input/notification_type/session_id/cwd) is Claude Code's,
+# but anything that mirrors it gets the same tool-name-to-detail extraction
+# and Notification classification for free. An agent with a different shape
+# still gets a working pet: every field defaults to empty rather than failing.
+#
 # This script must NEVER fail a session and must NEVER add latency. It always
 # exits 0, and the network call is fully detached.
 
 STATE="${1:-idle}"
+AGENT="${2:-claude-code}"
+# Keep this to a safe charset before it goes anywhere near JSON — $2 is a
+# trusted literal from hooks.json today, but there's no reason to rely on
+# that holding forever.
+case "$AGENT" in
+  *[!A-Za-z0-9_.-]*) AGENT="claude-code" ;;
+esac
 
 PORT="${CLAUDE_STATUS_PORT:-7777}"
 HOST_ADDR="${CLAUDE_STATUS_HOST:-127.0.0.1}"
@@ -144,7 +160,7 @@ def clip($n): .[0:$n];
     tool: $tool,
     detail: $detail,
     cwd: (($p.cwd // "") | scrub | clip(240)),
-    agent_source: "claude-code"
+    agent_source: $agent
   }
 JQ
 
@@ -155,6 +171,7 @@ build_body_jq() {
     --arg host "$HOSTNAME_SHORT" \
     --argjson remote "$REMOTE" \
     --arg fallback "$FALLBACK_SESSION" \
+    --arg agent "$AGENT" \
     "$JQ_PROGRAM" 2>/dev/null
 }
 
@@ -162,7 +179,7 @@ build_body_python() {
   printf '%s' "$PAYLOAD" | python3 -c '
 import json, re, sys
 
-state, user, host, remote, fallback = sys.argv[1:6]
+state, user, host, remote, fallback, agent = sys.argv[1:7]
 control = re.compile(r"[\x00-\x1f\x7f]")
 
 try:
@@ -229,9 +246,9 @@ json.dump({
     "tool": tool,
     "detail": detail,
     "cwd": scrub(payload.get("cwd"), 240),
-    "agent_source": "claude-code",
+    "agent_source": agent,
 }, sys.stdout, separators=(",", ":"))
-' "$STATE" "$USER_NAME" "$HOSTNAME_SHORT" "$REMOTE" "$FALLBACK_SESSION" 2>/dev/null
+' "$STATE" "$USER_NAME" "$HOSTNAME_SHORT" "$REMOTE" "$FALLBACK_SESSION" "$AGENT" 2>/dev/null
 }
 
 # Best-effort only. Kept so a machine with neither jq nor python3 still shows a
@@ -294,9 +311,9 @@ build_body_fallback() {
 
   [ -n "$session" ] || session="$FALLBACK_SESSION"
 
-  printf '{"state":"%s","session_id":"%s","user":"%s","host":"%s","remote":%s,"tool":"%s","detail":"%s","cwd":"%s","agent_source":"claude-code"}' \
+  printf '{"state":"%s","session_id":"%s","user":"%s","host":"%s","remote":%s,"tool":"%s","detail":"%s","cwd":"%s","agent_source":"%s"}' \
     "$state" "$session" "$(sanitize "$USER_NAME")" "$(sanitize "$HOSTNAME_SHORT")" \
-    "$REMOTE" "$tool" "$detail" "$cwd"
+    "$REMOTE" "$tool" "$detail" "$cwd" "$AGENT"
 }
 
 BODY=""

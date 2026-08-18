@@ -257,6 +257,18 @@ you already look at, not a second thing to look at.
 > when we ship multi-mascot"* — and doesn't route on it either, so there's no
 > interop cost to leaving it off.
 
+**Wiring another agent in.** `hooks/emit.sh` takes the agent name as `$2`
+(default `claude-code`), so a second agent's own hook config can point
+straight at this script rather than needing a fork of it — every parser
+ladder rung (jq, python3, the sed fallback) stamps whatever `$2` says. The
+detail extraction and Notification classification above are written against
+Claude Code's payload shape, but that's the shape Codex's own hooks already
+mirror closely enough — same event names, same `tool_input`/`tool_name`
+fields — for `emit.sh` to work against it unmodified.
+`scripts/install-codex-hooks.sh` wires that up: point Codex's own
+`~/.codex/hooks.json` at `hooks/emit.sh … codex` instead of forking a second
+script that would drift from this one.
+
 ## Why loopback HTTP
 
 The transport choice is the whole design. Comparable tools signal state through
