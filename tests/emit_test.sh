@@ -234,6 +234,31 @@ ok "remote is true under SSH" "True" \
 ok "agent is stamped" "claude-code" \
   "$(capture working '{}' | body_of | field agent_source)"
 
+# $2 lets a hook config for another agent point straight at this script
+# instead of forking it — Codex's hooks.json does exactly this.
+capture_agent() {
+  local state="$1" agent="$2" payload="$3"
+  local capture_file="$TMP/capture.$$.$RANDOM"
+  rm -f "$capture_file"
+  env PATH="$TMP/bin:$PATH" HOME="$TMP/home" CAPTURE="$capture_file" \
+      bash "$EMIT" "$state" "$agent" <<<"$payload" >/dev/null 2>&1
+  local waited=0
+  while [ ! -s "$capture_file" ] && [ "$waited" -lt 200 ]; do
+    sleep 0.01
+    waited=$((waited + 1))
+  done
+  cat "$capture_file" 2>/dev/null
+  rm -f "$capture_file"
+}
+
+ok "a second agent is stamped as itself" "codex" \
+  "$(capture_agent working codex '{}' | body_of | field agent_source)"
+
+# No caller has ever been able to inject arbitrary JSON through $2 — bad
+# characters fall back to the default rather than reaching the wire.
+ok "a hostile agent name falls back to claude-code" "claude-code" \
+  "$(capture_agent working '"};{"pwned":true' '{}' | body_of | field agent_source)"
+
 section "silence"
 
 touch "$TMP/home/killswitch"

@@ -32,6 +32,10 @@ The release that makes this installable by someone who isn't me.
   than being ignored. One agent looks exactly like it always has; a second gets
   its own colour — shared by all of that agent's sessions — and its name under
   the critter, rather than a second window competing for desktop space.
+- **`hooks/emit.sh` takes the agent name as `$2`**, so another agent's own hook
+  config can point straight at it instead of forking it.
+  `scripts/install-codex-hooks.sh` wires this up for Codex — dry-run by
+  default, `--write` backs up and replaces `~/.codex/hooks.json`.
 - **The pet celebrates a finished turn.** When the last working session goes
   idle it hops with a delighted `^ ^` and throws a few sparks, for two and a
   half seconds, then settles. Reads off the collapsed mood, so a pet watching
@@ -54,7 +58,7 @@ The release that makes this installable by someone who isn't me.
 - Launch at login, via `SMAppService`.
 - Optional Sparkle auto-updates, off by default and behind a build flag, so the
   default build fetches nothing.
-- Test suites: 112 Swift unit tests and 67 shell tests for `hooks/emit.sh`.
+- Test suites: 112 Swift unit tests and 69 shell tests for `hooks/emit.sh`.
 - CI on every push and pull request: Swift build and tests, app bundle assembly,
   shellcheck, the shell suite, and manifest validation.
 - Governance: `CONTRIBUTING.md`, `SECURITY.md`, `SUPPORT.md`, `ROADMAP.md`,
