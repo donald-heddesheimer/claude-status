@@ -75,6 +75,15 @@ That's intended: the pet is for the prompts you walked away from.
 preceding `PreToolUse`. That's what turns a vague `needs you` into `allow Bash?`
 — enough to decide whether it's worth getting up for.
 
+**`AskUserQuestion` gets no `Notification` event at all**, so the rule above
+doesn't reach it — Claude Code only fires `PreToolUse` and `PostToolUse` for it,
+both mapped to plain `working`. Everywhere else that ambiguity is the point
+(`Bash` might just be slow), but a pending `AskUserQuestion` is unambiguous: it
+cannot resolve without you. So `emit.sh` special-cases it — `PreToolUse` reads
+as `waiting` on sight, using the absence of `tool_response` (only `PostToolUse`
+carries one) to tell the two calls apart — rather than waiting on a
+`Notification` that Claude Code never sends for this tool.
+
 ## Finishing
 
 When the last working session goes idle, the pet hops three times with a

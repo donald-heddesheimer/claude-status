@@ -54,7 +54,7 @@ The release that makes this installable by someone who isn't me.
 - Launch at login, via `SMAppService`.
 - Optional Sparkle auto-updates, off by default and behind a build flag, so the
   default build fetches nothing.
-- Test suites: 112 Swift unit tests and 55 shell tests for `hooks/emit.sh`.
+- Test suites: 112 Swift unit tests and 67 shell tests for `hooks/emit.sh`.
 - CI on every push and pull request: Swift build and tests, app bundle assembly,
   shellcheck, the shell suite, and manifest validation.
 - Governance: `CONTRIBUTING.md`, `SECURITY.md`, `SUPPORT.md`, `ROADMAP.md`,
@@ -82,6 +82,13 @@ The release that makes this installable by someone who isn't me.
 
 ### Fixed
 
+- **`AskUserQuestion` now jitters the pet like any other prompt.** It never
+  gets a `Notification` hook event — Claude Code only sends `PreToolUse` and
+  `PostToolUse` for it, both mapped to plain `working` — so the pet used to sit
+  there looking busy while it was actually blocked on you. `emit.sh` now reads
+  a pending `AskUserQuestion` as `waiting` on sight, using the absence of
+  `tool_response` (only `PostToolUse` carries one) to tell it apart from an
+  answered one.
 - The listener accepted **every path and every HTTP method** — the request line
   was parsed but discarded, so `GET /anything` was treated as a state update.
   It now requires `POST /state`.

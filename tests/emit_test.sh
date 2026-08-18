@@ -153,6 +153,30 @@ for_each_parser waiting '{"notification_type":"some_future_thing"}' state "idle"
 # Only the waiting state is reclassified; nothing else is touched.
 for_each_parser working '{"notification_type":"idle_prompt"}' state "working"
 
+section "AskUserQuestion blocks without a Notification event"
+
+# AskUserQuestion never gets a Notification hook — Claude Code only fires
+# PreToolUse/PostToolUse, both mapped to "working" by hooks.json. PreToolUse
+# never carries tool_response; that absence is the only signal that the call
+# is still pending on a human, so it must read as "waiting" even though the
+# hook only ever asked for "working".
+for_each_parser working \
+  '{"tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Deploy to prod?"}]}}' \
+  state "waiting"
+
+for_each_parser working \
+  '{"tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Deploy to prod?"}]}}' \
+  detail "Deploy to prod?"
+
+# PostToolUse carries tool_response once you have actually answered — the
+# call is not pending on anyone anymore, so it goes back to "working".
+for_each_parser working \
+  '{"tool_name":"AskUserQuestion","tool_response":{"answer":"yes"}}' \
+  state "working"
+
+# Every other tool is unaffected — only AskUserQuestion gets this treatment.
+for_each_parser working '{"tool_name":"Bash","tool_input":{"command":"ls"}}' state "working"
+
 section "hostile input"
 
 # Every one of these would break a hand-rolled JSON string. The body has to

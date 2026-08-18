@@ -32,7 +32,7 @@ Three suites, all of which CI runs on every pull request:
 
 ```bash
 swift test --package-path mac-app     # 112 unit tests
-bash tests/emit_test.sh               # 55 hook tests
+bash tests/emit_test.sh               # 67 hook tests
 ./scripts/check-manifests.sh          # manifest and changelog consistency
 ```
 

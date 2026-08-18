@@ -103,6 +103,7 @@ def clip($n): .[0:$n];
      (($ti.url // "") | scrub | sub("^[A-Za-z][A-Za-z0-9+.-]*://"; "") | split("/") | .[0] // "")
    elif $tool == "WebSearch" then (($ti.query // "") | scrub)
    elif ($tool == "Task" or $tool == "Agent") then (($ti.description // "") | scrub)
+   elif $tool == "AskUserQuestion" then (($ti.questions[0].question // "") | scrub)
    else "" end | clip(120)) as $detail
 
 # The Notification hook fires for a whole family of events, only some of which
@@ -114,7 +115,15 @@ def clip($n): .[0:$n];
 # Anything not on the blocked-on-you list falls back to idle: a false "needs
 # you" is far more annoying than a missed one, so unknown types stay quiet.
 | (($p.notification_type // "") | scrub) as $nt
-| (if $state != "waiting" then $state
+# AskUserQuestion never fires a Notification event — Claude Code only sends
+# PreToolUse/PostToolUse for it, both mapped to "working" by hooks.json. But
+# unlike a slow Bash call, a pending AskUserQuestion is blocking by
+# definition: it cannot resolve without you. PostToolUse carries
+# tool_response; PreToolUse never does, so its absence is what tells the two
+# apart.
+| (($p.tool_response != null)) as $answered
+| (if $state == "working" and $tool == "AskUserQuestion" and ($answered | not) then "waiting"
+   elif $state != "waiting" then $state
    # Field absent — an older Claude Code that doesn't send it. Keep the previous
    # behaviour rather than silently going quiet.
    elif $nt == "" then "waiting"
@@ -189,8 +198,19 @@ elif tool == "WebSearch":
     detail = field("query")
 elif tool in ("Task", "Agent"):
     detail = field("description")
+elif tool == "AskUserQuestion":
+    questions = tool_input.get("questions")
+    first = questions[0] if isinstance(questions, list) and questions else None
+    detail = scrub(first.get("question"), 120) if isinstance(first, dict) else ""
 else:
     detail = ""
+
+# AskUserQuestion never fires a Notification event, so unlike a permission
+# prompt the pet would never learn it is blocking. PreToolUse and PostToolUse
+# both map to "working"; PostToolUse alone carries tool_response, so its
+# absence is what marks the call as still pending on you.
+if state == "working" and tool == "AskUserQuestion" and payload.get("tool_response") is None:
+    state = "waiting"
 
 blocking = {
     "permission_prompt", "worker_permission_prompt", "agent_needs_input",
@@ -246,9 +266,21 @@ build_body_fallback() {
     WebFetch)     detail="$(json_str url | sed -e 's|^[a-z]*://||' -e 's|/.*||')" ;;
     WebSearch)    detail="$(json_str query)" ;;
     Task|Agent)   detail="$(json_str description)" ;;
+    AskUserQuestion) detail="$(json_str question)" ;;
     *)            detail="" ;;
   esac
   detail="$(sanitize "$detail")"
+
+  # AskUserQuestion never fires a Notification event, so unlike a permission
+  # prompt the pet would never learn it's blocking. PreToolUse and PostToolUse
+  # both map to "working"; PostToolUse alone carries tool_response, so its
+  # absence marks the call as still pending on you.
+  if [ "$state" = "working" ] && [ "$tool" = "AskUserQuestion" ]; then
+    case "$PAYLOAD" in
+      *'"tool_response"'*) : ;;
+      *) state="waiting" ;;
+    esac
+  fi
 
   if [ "$state" = "waiting" ]; then
     nt="$(json_str notification_type)"
