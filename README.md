@@ -125,6 +125,17 @@ then come from that session alone, and the hover panel lists it and says how man
 it's hiding. If it ends, the pet adopts another rather than going blank. **All
 sessions** puts everything back.
 
+### Watching more than one agent
+
+![The same pet speaking for Claude, then for Codex — a tinted bubble and a name under the critter](docs/agents.png)
+
+Every event carries which agent sent it, and anything speaking the same
+protocol — Codex, opencode, whatever's next — shares this pet rather than
+opening a second one. One agent looks exactly like it always has. A second
+gets its own colour, shared by all of that agent's sessions, and its name
+appears under the critter so you know who's talking without a separate window
+competing for space.
+
 ---
 
 ## Remote sessions over SSH
@@ -272,7 +283,7 @@ with AppKit, and the hook needs only `curl`.
 ### Developing
 
 ```bash
-swift test --package-path mac-app     # 106 unit tests
+swift test --package-path mac-app     # 112 unit tests
 bash tests/emit_test.sh               # 55 hook tests, incl. one end to end
 ./scripts/check-manifests.sh          # manifests and changelog
 ```

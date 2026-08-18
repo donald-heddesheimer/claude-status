@@ -21,9 +21,9 @@ final class SessionStoreTests: XCTestCase {
 
     private func event(_ id: String, _ state: String, tool: String = "", detail: String = "",
                        cwd: String = "", remote: Bool = false,
-                       host: String = "mac") -> StateEvent {
+                       host: String = "mac", agent: String = "claude-code") -> StateEvent {
         StateEvent(sessionID: id, state: state, user: "donald", host: host, remote: remote,
-                   tool: tool, detail: detail, cwd: cwd, agentSource: "claude-code")
+                   tool: tool, detail: detail, cwd: cwd, agentSource: agent)
     }
 
     // MARK: - Collapsing several sessions into one mood
@@ -353,6 +353,81 @@ final class SessionStoreTests: XCTestCase {
 
         XCTAssertNil(store.captionColor)
         XCTAssertTrue(store.choices.allSatisfy { $0.color == nil })
+    }
+
+    // MARK: - Multiple agents, one pet
+
+    /// One agent is the ordinary case and shouldn't look any different than it
+    /// always has — colour still tells sessions of that one agent apart.
+    func testOneAgentIsNotWorthMentioning() {
+        let store = store()
+        store.apply(event("a", "working", tool: "Edit", detail: "App.swift", agent: "claude-code"))
+        store.apply(event("b", "working", tool: "Read", detail: "README.md", agent: "claude-code"))
+
+        XCTAssertFalse(store.multipleAgents)
+        XCTAssertNil(store.speakingAgent)
+        XCTAssertNotEqual(store.color(for: "a"), store.color(for: "b"), "still told apart by session")
+    }
+
+    /// A second agent is the whole point: the label says which one is talking,
+    /// and its sessions all wear the same colour rather than one each.
+    func testASecondAgentGetsNamedAndColoured() {
+        let store = store()
+        store.apply(event("a", "working", tool: "Edit", detail: "App.swift", agent: "claude-code"))
+        clock.advance(1)
+        store.apply(event("b", "working", tool: "fixing bug.rs", agent: "codex"))
+
+        XCTAssertTrue(store.multipleAgents)
+        XCTAssertEqual(store.speakingAgent, "Codex")
+        XCTAssertEqual(store.thought?.sessionID, "b", "most recently active speaks")
+        XCTAssertNotEqual(store.color(for: "a"), store.color(for: "b"))
+    }
+
+    func testEveryCodexSessionSharesOneColour() {
+        let store = store()
+        store.apply(event("a", "working", agent: "claude-code"))
+        store.apply(event("b", "working", agent: "codex"))
+        store.apply(event("c", "working", agent: "codex"))
+
+        XCTAssertEqual(store.color(for: "b"), store.color(for: "c"))
+        XCTAssertNotEqual(store.color(for: "a"), store.color(for: "b"))
+    }
+
+    /// The label always names whichever session the bubble above it is quoting
+    /// — naming a different one would make the label actively misleading.
+    func testTheLabelNamesWhoeverTheBubbleIsQuoting() {
+        let store = store()
+        store.apply(event("a", "waiting", tool: "Bash", agent: "claude-code"))
+        store.apply(event("b", "working", agent: "codex"))
+
+        XCTAssertEqual(store.thought?.sessionID, "a", "waiting outranks working")
+        XCTAssertEqual(store.speakingAgent, "Claude")
+    }
+
+    /// Losing the second agent should make the pet quiet about agents again,
+    /// same as it was before that agent ever showed up.
+    func testLosingTheSecondAgentDropsTheLabel() {
+        let store = store()
+        store.apply(event("a", "working", agent: "claude-code"))
+        store.apply(event("b", "working", agent: "codex"))
+        XCTAssertTrue(store.multipleAgents)
+
+        store.apply(event("b", "gone"))
+        XCTAssertFalse(store.multipleAgents)
+        XCTAssertNil(store.speakingAgent)
+    }
+
+    /// An agent this build has no display name for still gets one — its own
+    /// name, capitalised — rather than being dropped or shown as a raw slug.
+    func testAnUnrecognisedAgentGetsACapitalisedName() {
+        let store = store()
+        store.apply(event("a", "working", agent: "claude-code"))
+        store.apply(event("b", "working", agent: "opencode"))
+        store.apply(event("c", "working", agent: "some-new-thing"))
+
+        let names = Set(store.choices.map(\.label))
+        XCTAssertTrue(names.contains { $0.contains("opencode") })
+        XCTAssertTrue(names.contains { $0.contains("Some-New-Thing") })
     }
 
     // MARK: - Expiry
